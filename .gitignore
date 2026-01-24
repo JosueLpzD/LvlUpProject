@@ -1,0 +1,10 @@
+# Global Ignores
+node_modules/
+__pycache__/
+*.pyc
+.env
+.venv
+venv/
+.vscode/
+.idea/
+.DS_Store
