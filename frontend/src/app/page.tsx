@@ -7,11 +7,13 @@ import { LootShop } from "@/components/marketplace/LootShop";
 import { FloatingPomodoro } from "@/components/productivity/FloatingPomodoro";
 import { WeeklyCalendarView } from "@/components/dashboard/WeeklyCalendarView";
 import { ActiveQuestBoard } from "@/components/dashboard/ActiveQuestBoard";
+import { NaviFairy } from "@/components/ai/NaviFairy";
 
 export default function Home() {
   return (
     <AppShell>
       <FloatingPomodoro />
+      <NaviFairy />
 
       {/* Main Scrollable Container */}
       <div className="w-full h-full overflow-y-auto custom-scrollbar p-6 flex flex-col gap-10" data-component="PageContainer">

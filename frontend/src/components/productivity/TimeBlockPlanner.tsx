@@ -497,6 +497,7 @@ export function TimeBlockPlanner() {
                                         value={durationModal.currentDuration}
                                         onChange={(e) => setDurationModal(prev => ({ ...prev, currentDuration: Number(e.target.value) }))}
                                         className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-center font-mono focus:outline-none focus:border-blue-500"
+                                        title="Duración en minutos"
                                     />
                                     <button
                                         onClick={() => setDurationModal(prev => ({ ...prev, currentDuration: Math.min(60, prev.currentDuration + 5) }))}
@@ -534,6 +535,7 @@ export function TimeBlockPlanner() {
                                     value={config.startHour}
                                     onChange={(e) => setConfig(prev => ({ ...prev, startHour: Math.min(Number(e.target.value), prev.endHour - 1) }))}
                                     className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white"
+                                    title="Hora de inicio del planificador"
                                 />
                             </div>
                             <div>
@@ -544,6 +546,7 @@ export function TimeBlockPlanner() {
                                     value={config.endHour}
                                     onChange={(e) => setConfig(prev => ({ ...prev, endHour: Math.max(Number(e.target.value), prev.startHour + 1) }))}
                                     className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white"
+                                    title="Hora de fin del planificador"
                                 />
                             </div>
                         </div>
@@ -568,6 +571,7 @@ export function TimeBlockPlanner() {
                     <button
                         onClick={() => setIsAddHabitOpen(true)}
                         className="w-14 h-14 md:w-16 md:h-16 rounded-2xl border-2 border-dashed border-zinc-700 hover:border-amber-500 hover:bg-amber-500/10 flex items-center justify-center transition-all shrink-0 text-zinc-500 hover:text-amber-500"
+                        title="Añadir nuevo hábito"
                     >
                         <Plus size={24} />
                     </button>
