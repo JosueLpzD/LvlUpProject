@@ -16,17 +16,15 @@ export function AppShell({ children }: AppShellProps) {
             </div>
 
             <div className="relative z-10 flex flex-col min-h-screen">
-                {/* <CharacterHUD /> - HIDDEN FOR FOCUS MODE */}
+                <CharacterHUD />
 
                 <main className="flex-1 w-full mx-auto p-4 sm:p-6 lg:p-8 animate-in fade-in duration-500 border-x border-zinc-800 bg-black/40 shadow-2xl my-4 rounded-xl" data-component="Layout: Body / Main">
                     {children}
                 </main>
 
-                {/* <footer ... - HIDDEN FOR FOCUS MODE
                 <footer className="p-6 text-center text-zinc-600 text-xs border-t border-zinc-800 bg-black/60 backdrop-blur-sm" data-component="Layout: Footer">
                     <p className="font-mono uppercase tracking-widest opacity-50">Sistema Gamificado v1.0 • {new Date().getFullYear()}</p>
                 </footer>
-                */}
             </div>
         </div>
     );

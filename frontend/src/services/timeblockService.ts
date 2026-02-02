@@ -1,0 +1,63 @@
+const API_URL = "http://localhost:8000";
+
+export interface TimeBlockDTO {
+    id?: string;
+    title: string;
+    habit_id: string;
+    start_time: string;
+    end_time: string;
+    completed: boolean;
+}
+
+// Helper to convert time format (8:30 -> "08:30")
+const formatTime = (hour: number, min: number): string => {
+    return `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+};
+
+export const timeblockService = {
+    async getAll(): Promise<TimeBlockDTO[]> {
+        const response = await fetch(`${API_URL}/timeblocks`);
+        if (!response.ok) throw new Error("Failed to fetch blocks");
+        return response.json();
+    },
+
+    async create(block: { habitId: string, title?: string, startHour: number, startMin: number, durationMin: number }): Promise<TimeBlockDTO> {
+        // Calcular end_time
+        const startTotal = block.startHour * 60 + block.startMin;
+        const endTotal = startTotal + block.durationMin;
+        const endHour = Math.floor(endTotal / 60);
+        const endMin = endTotal % 60;
+
+        const payload = {
+            title: block.title || "Actividad",
+            habit_id: block.habitId,
+            start_time: formatTime(block.startHour, block.startMin),
+            end_time: formatTime(endHour, endMin),
+            completed: false
+        };
+
+        const response = await fetch(`${API_URL}/timeblocks`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error("Failed to create block");
+        const result = await response.json(); // { id: "...", message: "..." }
+
+        return {
+            ...payload,
+            id: result.id
+        };
+    },
+
+    // Future expansion: update status
+    async updateStatus(id: string, completed: boolean): Promise<void> {
+        // FastAPI expects simple types as query params by default
+        const response = await fetch(`${API_URL}/timeblocks/${id}?completed=${completed}`, {
+            method: "PUT"
+        });
+
+        if (!response.ok) throw new Error("Failed to update status");
+    }
+};

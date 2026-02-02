@@ -13,7 +13,7 @@ interface SkillTrackProps {
 
 export function SkillTrack({ attribute, label }: SkillTrackProps) {
     const { user } = useGameStore();
-    const currentXP = user.stats.attributes[attribute];
+    const currentXP = user.stats.attributes[attribute] || 0;
 
     // Find current level for this specific attribute based on global thresholds (simplified logic)
     // In a real RPG, each skill might have its own curve, but we'll use the global one for consistency

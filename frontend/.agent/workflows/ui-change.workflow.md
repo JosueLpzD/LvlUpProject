@@ -8,6 +8,7 @@ target-areas:
   - "src/components/**"
 recommended-skills:
   - ui
+  - ui-ux-pro-max
   - nextjs
   - react
   - tailwind

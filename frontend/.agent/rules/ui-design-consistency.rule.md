@@ -8,6 +8,7 @@ scope:
   - "src/components/**"
 required-skills:
   - ui
+  - ui-ux-pro-max
   - nextjs
   - react
   - tailwind

@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import { Plus, GripVertical, Clock, Trash2, Sparkles } from "lucide-react";
+import { Plus, GripVertical, Clock, Trash2, Sparkles, CheckCircle, XCircle } from "lucide-react";
+import { timeblockService, TimeBlockDTO } from "@/services/timeblockService";
 
 // Mock Data for "My Habits" Palette
 const INITIAL_HABIT_PALETTE = [
@@ -22,34 +23,46 @@ interface TimeBlock {
     startMin: number; // 0, 15, 30, 45
     durationMin: number; // in minutes
     habitId: string;
+    completed?: boolean;         // NEW: Track status
+    hasPrompted?: boolean;       // NEW: Don't ask twice
 }
 
 export function TimeBlockPlanner() {
-    const [blocks, setBlocks] = useState<TimeBlock[]>([
-        { id: 'b1', startHour: 8, startMin: 0, durationMin: 60, habitId: 'h2' }, // 8:00 - 9:00 Deep Work
-        { id: 'b2', startHour: 10, startMin: 30, durationMin: 30, habitId: 'h1' }, // 10:30 - 11:00 Lectura
-    ]);
+    const [blocks, setBlocks] = useState<TimeBlock[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Hydration Fix: Load from localStorage only on client mount
-    React.useEffect(() => {
-        const saved = localStorage.getItem('lvlup_timeblocks');
-        if (saved) {
+    // 1. Load from API on Mount (Goodbye LocalStorage!)
+    useEffect(() => {
+        const loadBlocks = async () => {
             try {
-                setBlocks(JSON.parse(saved));
-            } catch (e) {
-                console.error("Failed to load blocks", e);
-            }
-        }
-    }, []);
+                const apiBlocks = await timeblockService.getAll();
+                // Transform API DTO -> Frontend Block
+                const transformed: TimeBlock[] = apiBlocks.map(dto => {
+                    const [sh, sm] = dto.start_time.split(':').map(Number);
+                    const [eh, em] = dto.end_time.split(':').map(Number);
+                    const startTotal = sh * 60 + sm;
+                    const endTotal = eh * 60 + em;
+                    // Handle day wrap properly if needed, for now assume same day
+                    const duration = endTotal - startTotal;
 
-    // Save to localStorage whenever blocks change (skip initial render if empty to avoid overwriting with default)
-    React.useEffect(() => {
-        // Only save if we have blocks (or if we intentionally want to save an empty list, 
-        // but for now let's just save everything)
-        if (blocks.length > 0) {
-            localStorage.setItem('lvlup_timeblocks', JSON.stringify(blocks));
-        }
-    }, [blocks]);
+                    return {
+                        id: dto.id || Math.random().toString(), // Fallback if no ID
+                        startHour: sh,
+                        startMin: sm,
+                        durationMin: duration > 0 ? duration : 30,
+                        habitId: dto.habit_id,
+                        completed: dto.completed
+                    };
+                });
+                setBlocks(transformed);
+            } catch (error) {
+                console.error("Failed to load timeblocks:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadBlocks();
+    }, []);
 
     const HOURS = Array.from({ length: 17 }, (_, i) => i + 5); // 5 AM to 9 PM
     const constraintsRef = useRef(null);
@@ -60,6 +73,54 @@ export function TimeBlockPlanner() {
     const [isAddHabitOpen, setIsAddHabitOpen] = useState(false);
     const [newHabitName, setNewHabitName] = useState("");
     const [newHabitIcon, setNewHabitIcon] = useState(EMOJI_OPTIONS[0]);
+
+    // Timer & Completion Confirmation State
+    const [confirmationModal, setConfirmationModal] = useState<{ isOpen: boolean; blockId: string | null; timeLeft: number }>({
+        isOpen: false, blockId: null, timeLeft: 5
+    });
+
+    // 2. Heartbeat Timer (Check completion)
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const now = new Date();
+            const currentTotalMin = now.getHours() * 60 + now.getMinutes();
+
+            blocks.forEach(block => {
+                if (block.completed || block.hasPrompted) return;
+
+                const blockEnd = block.startHour * 60 + block.startMin + block.durationMin;
+
+                // If block ended 1 minute ago (or just now)
+                if (currentTotalMin >= blockEnd) {
+                    setConfirmationModal({ isOpen: true, blockId: block.id, timeLeft: 5 });
+                    // Mark as prompted to avoid loop
+                    setBlocks(prev => prev.map(b => b.id === block.id ? { ...b, hasPrompted: true } : b));
+                }
+            });
+        }, 10000); // Check every 10s (for responsiveness)
+        return () => clearInterval(interval);
+    }, [blocks]);
+
+    // 3. Auto-Dismiss Timer Logic
+    useEffect(() => {
+        if (!confirmationModal.isOpen || confirmationModal.timeLeft <= 0) return;
+
+        const timer = setInterval(() => {
+            setConfirmationModal(prev => {
+                if (prev.timeLeft <= 1) {
+                    // Timeout reached: Auto-mark as NOT completed (or just close)
+                    return { isOpen: false, blockId: null, timeLeft: 0 };
+                }
+                return { ...prev, timeLeft: prev.timeLeft - 1 };
+            });
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [confirmationModal.isOpen, confirmationModal.timeLeft]);
+
+    // State for Duration Edit Modal
+    const [durationModal, setDurationModal] = useState<{ isOpen: boolean; blockId: string | null; currentDuration: number }>({
+        isOpen: false, blockId: null, currentDuration: 0
+    });
 
     // State for Collision Handling
     const [collisionState, setCollisionState] = useState<{
@@ -86,29 +147,69 @@ export function TimeBlockPlanner() {
         }).map(b => b.id);
     };
 
-    const addBlock = (habitId: string, hour: number, minute: number = 0) => {
-        const newBlock: TimeBlock = {
-            id: Math.random().toString(36).substr(2, 9),
+    const addBlock = async (habitId: string, hour: number, minute: number = 0) => {
+        // Calculate optimistic block for collision check
+        const tempId = Math.random().toString(36).substr(2, 9);
+        const duration = Math.max(15, Math.min(60, 60 - minute));
+
+        const optimisticBlock: TimeBlock = {
+            id: tempId,
             startHour: hour,
             startMin: minute,
-            // Clamp duration to remaining time in the hour (min 15)
-            durationMin: Math.max(15, Math.min(60, 60 - minute)),
+            durationMin: duration,
             habitId
         };
 
-        const conflicts = checkOverlap(newBlock);
+        const conflicts = checkOverlap(optimisticBlock);
 
         if (conflicts.length > 0) {
-            // Collision detected! Open confirmation modal
+            // Collision logic remains local for now
             setCollisionState({
                 isOpen: true,
-                pendingBlock: newBlock,
+                pendingBlock: optimisticBlock,
                 conflictingIds: conflicts
             });
         } else {
-            // No collision, add immediately
-            setBlocks(prev => [...prev, newBlock]);
+            // No collision -> Save to Backend
+            try {
+                const habit = getHabitById(habitId);
+                const savedDTO = await timeblockService.create({
+                    habitId,
+                    title: habit?.title,
+                    startHour: hour,
+                    startMin: minute,
+                    durationMin: duration
+                });
+
+                // Transform back to Frontend Model
+                const newBlock: TimeBlock = {
+                    ...optimisticBlock,
+                    id: savedDTO.id || tempId, // Use real ID
+                    completed: false
+                };
+
+                setBlocks(prev => [...prev, newBlock]);
+            } catch (error) {
+                console.error("Failed to save block", error);
+            }
         }
+    };
+
+    const handleComplete = async (id: string) => {
+        // 1. Optimistic Update
+        setBlocks(prev => prev.map(b => b.id === id ? { ...b, completed: true } : b));
+        setConfirmationModal({ isOpen: false, blockId: null, timeLeft: 0 });
+
+        // 2. API Call
+        try {
+            await timeblockService.updateStatus(id, true);
+        } catch (e) {
+            console.error("Failed to complete block", e);
+        }
+    };
+
+    const handleDismiss = () => {
+        setConfirmationModal({ isOpen: false, blockId: null, timeLeft: 0 });
     };
 
     const confirmReplace = () => {
@@ -132,9 +233,29 @@ export function TimeBlockPlanner() {
     const updateBlockDuration = (id: string, deltaMin: number) => {
         setBlocks(prev => prev.map(b => {
             if (b.id !== id) return b;
-            const newDuration = Math.max(15, b.durationMin + deltaMin);
+            const proposedDuration = b.durationMin + deltaMin;
+            // Fix: Clamp duration to fit within the hour (max 60 - startMin)
+            const maxAllowed = 60 - b.startMin;
+            const newDuration = Math.max(15, Math.min(proposedDuration, maxAllowed));
             return { ...b, durationMin: newDuration };
         }));
+    };
+
+    const handleOpenDurationModal = (block: TimeBlock) => {
+        setDurationModal({ isOpen: true, blockId: block.id, currentDuration: block.durationMin });
+    };
+
+    const submitCustomDuration = () => {
+        if (!durationModal.blockId) return;
+        const block = blocks.find(b => b.id === durationModal.blockId);
+        if (!block) return;
+
+        // Validate against hour boundary
+        const maxAllowed = 60 - block.startMin;
+        const newDuration = Math.max(5, Math.min(durationModal.currentDuration, maxAllowed)); // Min 5 mins
+
+        setBlocks(prev => prev.map(b => b.id === durationModal.blockId ? { ...b, durationMin: newDuration } : b));
+        setDurationModal({ isOpen: false, blockId: null, currentDuration: 0 });
     };
 
     const removeBlock = (id: string) => {
@@ -188,6 +309,43 @@ export function TimeBlockPlanner() {
 
     return (
         <div className="flex flex-row h-full gap-6 p-2" ref={constraintsRef} data-component="TimeBlockPlanner">
+
+            {/* COMPLETION CONFIRMATION MODAL */}
+            {confirmationModal.isOpen && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
+                    <div className="bg-[#1e202e] border border-emerald-500/50 p-6 rounded-2xl shadow-[0_0_50px_-10px_rgba(16,185,129,0.3)] max-w-sm w-full relative overflow-hidden">
+                        {/* Progress Bar Background */}
+                        <div className="absolute top-0 left-0 h-1 bg-emerald-500 transition-all duration-1000 ease-linear" style={{ width: `${(confirmationModal.timeLeft / 5) * 100}%` }} />
+
+                        <div className="flex flex-col gap-4 text-center relative z-10">
+                            <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto animate-bounce">
+                                <CheckCircle size={32} />
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-black text-white mb-2">¿Terminaste?</h3>
+                                <p className="text-zinc-400">
+                                    El tiempo de esta actividad ha terminado.<br />
+                                    <span className="text-emerald-400 font-bold">¿La completaste con éxito?</span>
+                                </p>
+                            </div>
+                            <div className="flex gap-3 mt-4">
+                                <button
+                                    onClick={handleDismiss}
+                                    className="flex-1 py-3 rounded-xl bg-zinc-800 text-zinc-400 font-medium hover:bg-zinc-700 transition-colors"
+                                >
+                                    No ({confirmationModal.timeLeft}s)
+                                </button>
+                                <button
+                                    onClick={() => confirmationModal.blockId && handleComplete(confirmationModal.blockId)}
+                                    className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-900/20"
+                                >
+                                    ¡SÍ!
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* COLLISION CONFIRMATION MODAL */}
             {collisionState.isOpen && (
@@ -265,6 +423,47 @@ export function TimeBlockPlanner() {
                 </div>
             )}
 
+            {/* 1.6. CUSTOM DURATION MODAL */}
+            {durationModal.isOpen && (
+                <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="bg-[#1e202e] border border-zinc-700 p-6 rounded-2xl shadow-2xl max-w-sm w-full animate-in fade-in zoom-in duration-200">
+                        <div className="flex flex-col gap-4">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="p-2 bg-blue-500/20 text-blue-400 rounded-lg">
+                                    <Clock size={20} />
+                                </div>
+                                <h3 className="text-xl font-bold text-white">Ajustar Duración</h3>
+                            </div>
+
+                            <div>
+                                <label className="text-xs text-zinc-400 mb-2 block">Duración en minutos (máx: {durationModal.blockId && blocks.find(b => b.id === durationModal.blockId) ? (60 - blocks.find(b => b.id === durationModal.blockId)!.startMin) : 60})</label>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setDurationModal(prev => ({ ...prev, currentDuration: Math.max(5, prev.currentDuration - 5) }))}
+                                        className="w-10 h-10 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center font-bold"
+                                    >-</button>
+                                    <input
+                                        type="number"
+                                        value={durationModal.currentDuration}
+                                        onChange={(e) => setDurationModal(prev => ({ ...prev, currentDuration: Number(e.target.value) }))}
+                                        className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-center font-mono focus:outline-none focus:border-blue-500"
+                                    />
+                                    <button
+                                        onClick={() => setDurationModal(prev => ({ ...prev, currentDuration: Math.min(60, prev.currentDuration + 5) }))}
+                                        className="w-10 h-10 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center font-bold"
+                                    >+</button>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 mt-4">
+                                <button onClick={() => setDurationModal({ isOpen: false, blockId: null, currentDuration: 0 })} className="flex-1 py-2 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700">Cancelar</button>
+                                <button onClick={submitCustomDuration} className="flex-1 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500">Guardar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* 1. Habit Compact Palette (Sidebar) - Added z-50 for drag visibility */}
             <div className="w-20 md:w-24 flex flex-col items-center gap-4 bg-[#181a25]/90 backdrop-blur-xl border border-zinc-800 py-6 rounded-3xl shadow-2xl shrink-0 h-[85vh] sticky top-4 z-50">
                 <div className="mb-2 flex flex-col items-center">
@@ -332,7 +531,9 @@ export function TimeBlockPlanner() {
                 {/* Header Date */}
                 <div className="px-8 py-6 border-b border-zinc-800 flex justify-between items-center bg-[#181a25] shrink-0 z-20">
                     <div>
-                        <h2 className="text-4xl font-black text-white tracking-tighter">Lunes, 26</h2>
+                        <h2 className="text-4xl font-black text-white tracking-tighter capitalize">
+                            {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' })}
+                        </h2>
                         <div className="flex items-center gap-3 mt-1">
                             <span className="text-teal-400 font-bold bg-teal-400/10 px-2 py-0.5 rounded text-sm">Hoy</span>
                             <span className="text-zinc-500 font-medium text-sm">12 horas libres disponibles</span>
@@ -426,18 +627,19 @@ export function TimeBlockPlanner() {
                                                         "absolute rounded-xl border pl-2 pr-1 flex items-center overflow-hidden group/block z-10 transition-all cursor-grab active:cursor-grabbing",
                                                         habit.color, // Apply full color set: bg, border, text
                                                         (habit as any).shadow,
-                                                        "hover:brightness-110"
+                                                        "hover:brightness-110",
+                                                        block.completed && "opacity-60 saturate-50 border-emerald-500/50 bg-emerald-900/10"
                                                     )}
                                                     // Remove custom style override since we use real classes now
                                                     style={{}}
                                                 >
                                                     {/* Internal Layout for Squared/Compact Blocks */}
                                                     <div className="flex flex-col md:flex-row items-start gap-2 overflow-hidden w-full h-full p-2">
-                                                        <div className={cn("w-6 h-6 md:w-8 md:h-8 rounded-md flex items-center justify-center text-sm md:text-lg shadow-inner bg-black/20 shrink-0", habit.color.split(' ')[0])}>
-                                                            {habit.emoji}
+                                                        <div className={cn("w-6 h-6 md:w-8 md:h-8 rounded-md flex items-center justify-center text-sm md:text-lg shadow-inner bg-black/20 shrink-0 relative", habit.color.split(' ')[0])}>
+                                                            {block.completed ? <CheckCircle size={14} className="text-emerald-400" /> : habit.emoji}
                                                         </div>
                                                         <div className="min-w-0 flex-1 leading-none">
-                                                            <h4 className={cn("font-bold text-white truncate text-xs md:text-sm")}>{habit.title}</h4>
+                                                            <h4 className={cn("font-bold text-white truncate text-xs md:text-sm", block.completed && "line-through text-zinc-400")}>{habit.title}</h4>
                                                             {block.durationMin > 0 && (
                                                                 <span className="text-[9px] font-mono text-zinc-500 opacity-70">
                                                                     {block.durationMin}m
@@ -448,11 +650,15 @@ export function TimeBlockPlanner() {
 
                                                     {/* Resize / Delete Controls - Internal overlay */}
                                                     <div className="absolute top-1 right-1 flex flex-col gap-1 opacity-0 group-hover/block:opacity-100 transition-opacity bg-black/60 p-0.5 rounded backdrop-blur-sm z-50">
+                                                        {!block.completed && (
+                                                            <button onClick={(e) => { e.stopPropagation(); handleComplete(block.id); }} className="p-0.5 hover:text-emerald-400 text-zinc-300" title="Marcar como completado"><CheckCircle size={10} /></button>
+                                                        )}
                                                         <button onClick={(e) => { e.stopPropagation(); removeBlock(block.id); }} className="p-0.5 hover:text-red-500 text-zinc-300"><Trash2 size={10} /></button>
                                                         <div className="flex flex-col gap-0.5">
                                                             <button onClick={(e) => { e.stopPropagation(); updateBlockDuration(block.id, -15); }} className="w-3 h-3 bg-zinc-700 text-[8px] hover:bg-zinc-600 rounded flex items-center justify-center text-white">-</button>
                                                             <button onClick={(e) => { e.stopPropagation(); updateBlockDuration(block.id, 15); }} className="w-3 h-3 bg-zinc-700 text-[8px] hover:bg-zinc-600 rounded flex items-center justify-center text-white">+</button>
                                                         </div>
+                                                        <button onClick={(e) => { e.stopPropagation(); handleOpenDurationModal(block); }} className="p-0.5 hover:text-blue-400 text-zinc-300" title="Personalizar tiempo"><Clock size={10} /></button>
                                                     </div>
                                                 </motion.div>
                                             );
