@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import { Plus, GripVertical, Clock, Trash2, Sparkles, CheckCircle, XCircle } from "lucide-react";
+import { Plus, GripVertical, Clock, Trash2, Sparkles, CheckCircle, XCircle, Settings } from "lucide-react";
 import { timeblockService, TimeBlockDTO } from "@/services/timeblockService";
 
 // Mock Data for "My Habits" Palette
@@ -64,7 +64,16 @@ export function TimeBlockPlanner() {
         loadBlocks();
     }, []);
 
-    const HOURS = Array.from({ length: 17 }, (_, i) => i + 5); // 5 AM to 9 PM
+    // Customizable Time Range State (Default 5 AM - 11 PM)
+    const [config, setConfig] = useState({ startHour: 5, endHour: 21 }); // 21 is 9 PM, so range ends at 10 PM block
+    const [isConfigOpen, setIsConfigOpen] = useState(false);
+
+    // Dynamic Hours Array
+    const HOURS = Array.from(
+        { length: config.endHour - config.startHour + 1 },
+        (_, i) => config.startHour + i
+    );
+
     const constraintsRef = useRef(null);
 
     const [habits, setHabits] = useState(INITIAL_HABIT_PALETTE);
@@ -282,8 +291,15 @@ export function TimeBlockPlanner() {
         setDurationModal({ isOpen: false, blockId: null, currentDuration: 0 });
     };
 
-    const removeBlock = (id: string) => {
+    const removeBlock = async (id: string) => {
+        // Optimistic update
         setBlocks(prev => prev.filter(b => b.id !== id));
+
+        try {
+            await timeblockService.delete(id);
+        } catch (error) {
+            console.error("Failed to delete block", error);
+        }
     };
 
     const getHabitById = (id: string) => habits.find(h => h.id === id);
@@ -498,6 +514,47 @@ export function TimeBlockPlanner() {
                 </div>
             )}
 
+            {/* 1.7. CONFIGURATION MODAL */}
+            {isConfigOpen && (
+                <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="bg-[#1e202e] border border-zinc-700 p-6 rounded-2xl shadow-2xl max-w-sm w-full animate-in fade-in zoom-in duration-200">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-zinc-700/50 text-zinc-200 rounded-lg">
+                                <Settings size={20} />
+                            </div>
+                            <h3 className="text-xl font-bold text-white">Configurar Horario</h3>
+                        </div>
+
+                        <div className="flex flex-col gap-4">
+                            <div>
+                                <label className="text-xs text-zinc-400 mb-1 block">Hora Inicio (0-23)</label>
+                                <input
+                                    type="number"
+                                    min="0" max="23"
+                                    value={config.startHour}
+                                    onChange={(e) => setConfig(prev => ({ ...prev, startHour: Math.min(Number(e.target.value), prev.endHour - 1) }))}
+                                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs text-zinc-400 mb-1 block">Hora Fin (0-23)</label>
+                                <input
+                                    type="number"
+                                    min="0" max="23"
+                                    value={config.endHour}
+                                    onChange={(e) => setConfig(prev => ({ ...prev, endHour: Math.max(Number(e.target.value), prev.startHour + 1) }))}
+                                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 mt-6">
+                            <button onClick={() => setIsConfigOpen(false)} className="flex-1 py-2 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700">Cerrar</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* 1. Habit Compact Palette (Sidebar) - Added z-50 for drag visibility */}
             <div className="w-20 md:w-24 flex flex-col items-center gap-4 bg-[#181a25]/90 backdrop-blur-xl border border-zinc-800 py-6 rounded-3xl shadow-2xl shrink-0 h-[85vh] sticky top-4 z-50">
                 <div className="mb-2 flex flex-col items-center">
@@ -570,9 +627,18 @@ export function TimeBlockPlanner() {
                         </h2>
                         <div className="flex items-center gap-3 mt-1">
                             <span className="text-teal-400 font-bold bg-teal-400/10 px-2 py-0.5 rounded text-sm">Hoy</span>
-                            <span className="text-zinc-500 font-medium text-sm">12 horas libres disponibles</span>
+                            <span className="text-zinc-500 font-medium text-sm">{(config.endHour - config.startHour + 1)} horas activas</span>
                         </div>
                     </div>
+
+                    {/* Settings Button */}
+                    <button
+                        onClick={() => setIsConfigOpen(true)}
+                        className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
+                        title="Configurar Horario"
+                    >
+                        <Settings size={20} />
+                    </button>
                 </div>
 
                 {/* Scrollable Timeline */}

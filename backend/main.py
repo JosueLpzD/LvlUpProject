@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from routes.timeblock_routes import timeblock_router
 # Importaremos las rutas más adelante
 app = FastAPI()
 # Configurar CORS (Para que el Frontend puerto 3000 pueda hablar con el Backend puerto 8000)
@@ -16,3 +17,5 @@ app.add_middleware(
 @app.get("/")
 def read_root():
     return {"message": "Bienvenido al API de LvlUp"}
+
+app.include_router(timeblock_router)    

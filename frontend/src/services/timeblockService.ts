@@ -52,6 +52,7 @@ export const timeblockService = {
     },
 
     // Future expansion: update status
+    // Future expansion: update status
     async updateStatus(id: string, completed: boolean): Promise<void> {
         // FastAPI expects simple types as query params by default
         const response = await fetch(`${API_URL}/timeblocks/${id}?completed=${completed}`, {
@@ -59,5 +60,13 @@ export const timeblockService = {
         });
 
         if (!response.ok) throw new Error("Failed to update status");
+    },
+
+    async delete(id: string): Promise<void> {
+        const response = await fetch(`${API_URL}/timeblocks/${id}`, {
+            method: "DELETE"
+        });
+
+        if (!response.ok) throw new Error("Failed to delete block");
     }
 };
