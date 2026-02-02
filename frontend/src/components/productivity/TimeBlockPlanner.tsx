@@ -231,14 +231,30 @@ export function TimeBlockPlanner() {
     };
 
     const updateBlockDuration = (id: string, deltaMin: number) => {
-        setBlocks(prev => prev.map(b => {
-            if (b.id !== id) return b;
-            const proposedDuration = b.durationMin + deltaMin;
-            // Fix: Clamp duration to fit within the hour (max 60 - startMin)
-            const maxAllowed = 60 - b.startMin;
+        setBlocks(prev => {
+            const block = prev.find(b => b.id === id);
+            if (!block) return prev;
+
+            // 1. Calculate proposed duration
+            const proposedDuration = block.durationMin + deltaMin;
+
+            // 2. Find next block in the same hour to establish a "ceiling"
+            const nextBlock = prev
+                .filter(b => b.startHour === block.startHour && b.startMin > block.startMin && b.id !== id)
+                .sort((a, b) => a.startMin - b.startMin)[0];
+
+            // 3. Calculate max allowed duration
+            // Space until next block OR end of hour (60)
+            const ceilingMin = nextBlock ? nextBlock.startMin : 60;
+            const maxAllowed = ceilingMin - block.startMin;
+
+            // 4. Clamp new duration
             const newDuration = Math.max(15, Math.min(proposedDuration, maxAllowed));
-            return { ...b, durationMin: newDuration };
-        }));
+
+            if (newDuration === block.durationMin) return prev; // No change
+
+            return prev.map(b => b.id === id ? { ...b, durationMin: newDuration } : b);
+        });
     };
 
     const handleOpenDurationModal = (block: TimeBlock) => {
@@ -250,9 +266,17 @@ export function TimeBlockPlanner() {
         const block = blocks.find(b => b.id === durationModal.blockId);
         if (!block) return;
 
-        // Validate against hour boundary
-        const maxAllowed = 60 - block.startMin;
-        const newDuration = Math.max(5, Math.min(durationModal.currentDuration, maxAllowed)); // Min 5 mins
+        // 1. Find next block in same hour to check gaps
+        const nextBlock = blocks
+            .filter(b => b.startHour === block.startHour && b.startMin > block.startMin && b.id !== block.id)
+            .sort((a, b) => a.startMin - b.startMin)[0];
+
+        // 2. Calculate Strict Limit
+        const ceilingMin = nextBlock ? nextBlock.startMin : 60;
+        const maxAllowed = ceilingMin - block.startMin;
+
+        // 3. Clamp (Min 5 mins, Max calculated above)
+        const newDuration = Math.max(5, Math.min(durationModal.currentDuration, maxAllowed));
 
         setBlocks(prev => prev.map(b => b.id === durationModal.blockId ? { ...b, durationMin: newDuration } : b));
         setDurationModal({ isOpen: false, blockId: null, currentDuration: 0 });
@@ -436,7 +460,17 @@ export function TimeBlockPlanner() {
                             </div>
 
                             <div>
-                                <label className="text-xs text-zinc-400 mb-2 block">Duración en minutos (máx: {durationModal.blockId && blocks.find(b => b.id === durationModal.blockId) ? (60 - blocks.find(b => b.id === durationModal.blockId)!.startMin) : 60})</label>
+                                <label className="text-xs text-zinc-400 mb-2 block">
+                                    Duración en minutos (Máx disponible: {(() => {
+                                        if (!durationModal.blockId) return 60;
+                                        const block = blocks.find(b => b.id === durationModal.blockId);
+                                        if (!block) return 60;
+                                        const nextBlock = blocks
+                                            .filter(b => b.startHour === block.startHour && b.startMin > block.startMin && b.id !== block.id)
+                                            .sort((a, b) => a.startMin - b.startMin)[0];
+                                        return nextBlock ? nextBlock.startMin - block.startMin : 60 - block.startMin;
+                                    })()})
+                                </label>
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={() => setDurationModal(prev => ({ ...prev, currentDuration: Math.max(5, prev.currentDuration - 5) }))}

@@ -13,31 +13,47 @@ export default function Home() {
     <AppShell>
       <FloatingPomodoro />
 
-      <div className="flex flex-col gap-6 w-full h-screen px-4 pb-4 overflow-hidden relative" data-component="PageContainer">
+      {/* Main Scrollable Container */}
+      <div className="w-full h-full overflow-y-auto custom-scrollbar p-6 flex flex-col gap-10" data-component="PageContainer">
 
-        {/* Header Section */}
-        <div className="border-b border-zinc-800/50 py-4 shrink-0 border border-zinc-800/30 rounded-xl px-6 bg-black/20 mt-2" data-component="HeaderSection">
-          <WeeklyCalendarView />
-        </div>
-
-        {/* Content Area */}
-        <div className="flex flex-1 gap-6 overflow-hidden min-h-0" data-component="ContentArea">
-
-          {/* Main: Time Planner */}
-          <div className="flex-1 border border-zinc-800/50 rounded-2xl relative overflow-hidden flex flex-col shadow-2xl" data-component="MainSection">
-            <div className="absolute top-2 right-2 text-[10px] text-zinc-600 font-mono bg-black/50 px-2 rounded pointer-events-none z-50">MAIN SECTION</div>
+        {/* 1. TimeBlock Planner (Priority #1) */}
+        <section className="w-full flex-1 min-h-[85vh] flex flex-col gap-4" data-component="TimeBlockSection">
+          <h2 className="text-xl font-bold text-zinc-400 uppercase tracking-widest pl-2 border-l-4 border-amber-500">Planificador del Día</h2>
+          <div className="flex-1 border border-zinc-800/50 rounded-3xl overflow-hidden shadow-2xl bg-[#13151b]/50 relative">
             <TimeBlockPlanner />
           </div>
+        </section>
 
-          {/* Right Sidebar: Components */}
-          <div className="w-96 border border-zinc-800/50 rounded-2xl p-4 flex flex-col gap-6 overflow-y-auto bg-zinc-950/30" data-component="RightSidebar">
+        {/* 2. Weekly Calendar (Priority #2) */}
+        <section className="w-full shrink-0" data-component="CalendarSection">
+          <h2 className="text-xl font-bold text-zinc-400 uppercase tracking-widest pl-2 border-l-4 border-teal-500 mb-4">Calendario Semanal</h2>
+          <div className="bg-black/20 border border-zinc-800/50 rounded-2xl p-4">
+            <WeeklyCalendarView />
+          </div>
+        </section>
+
+        {/* 3. Other Components (Priority #3) */}
+        <section className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 pb-12" data-component="WidgetsSection">
+          {/* Column 1: Quests */}
+          <div className="flex flex-col gap-4">
+            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider">Misiones</h3>
             <ActiveQuestBoard />
-            <SkillTrack attribute="intellect" label="Inteligencia" />
-            <SkillTrack attribute="strength" label="Fuerza" />
-            <LootShop />
           </div>
 
-        </div>
+          {/* Column 2: Skills */}
+          <div className="flex flex-col gap-4">
+            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider">Progreso</h3>
+            <SkillTrack attribute="intellect" label="Inteligencia" />
+            <SkillTrack attribute="strength" label="Fuerza" />
+          </div>
+
+          {/* Column 3: Shop */}
+          <div className="flex flex-col gap-4">
+            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider">Tienda</h3>
+            <LootShop />
+          </div>
+        </section>
+
       </div>
     </AppShell>
   );
