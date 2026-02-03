@@ -52,6 +52,27 @@ async def update_timeblock(id: str, completed: bool):
         
     return {"message": "Estado actualizado correctamente"}
 
+@timeblock_router.put("/timeblocks/{id}/duration")
+async def update_timeblock_duration(id: str, start_time: str, end_time: str):
+    """
+    Actualiza el tiempo de inicio y fin de un bloque.
+    Esto permite persistir cambios de duración cuando el usuario expande o reduce un bloque.
+    """
+    # 1. Verificar ID válido
+    if not ObjectId.is_valid(id):
+        raise HTTPException(status_code=400, detail="ID inválido")
+    
+    # 2. Actualizar ambos campos en Mongo
+    result = await database.timeblocks.update_one(
+        {"_id": ObjectId(id)}, 
+        {"$set": {"start_time": start_time, "end_time": end_time}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Bloque no encontrado")
+        
+    return {"message": "Duración actualizada correctamente"}
+
 @timeblock_router.delete("/timeblocks/{id}")
 async def delete_timeblock(id: str):
     # 1. Validar ID de MongoDB

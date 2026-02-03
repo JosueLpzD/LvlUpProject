@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { Plus, GripVertical, Clock, Trash2, Sparkles, CheckCircle, XCircle, Settings } from "lucide-react";
 import { timeblockService, TimeBlockDTO } from "@/services/timeblockService";
+import { configService } from "@/services/configService";
+import { emitNaviEvent } from "@/lib/naviEvents";
 
 // Mock Data for "My Habits" Palette
 const INITIAL_HABIT_PALETTE = [
@@ -67,6 +69,43 @@ export function TimeBlockPlanner() {
     // Customizable Time Range State (Default 5 AM - 11 PM)
     const [config, setConfig] = useState({ startHour: 5, endHour: 21 }); // 21 is 9 PM, so range ends at 10 PM block
     const [isConfigOpen, setIsConfigOpen] = useState(false);
+
+    // Cargar configuración del servidor al iniciar
+    useEffect(() => {
+        const loadConfig = async () => {
+            try {
+                const serverConfig = await configService.get();
+                setConfig({
+                    startHour: serverConfig.start_hour,
+                    endHour: serverConfig.end_hour
+                });
+            } catch (error) {
+                console.error("Failed to load config, using defaults:", error);
+            }
+        };
+        loadConfig();
+    }, []);
+
+    // Función para guardar la configuración en el servidor
+    const saveConfigToServer = async () => {
+        try {
+            await configService.save({
+                start_hour: config.startHour,
+                end_hour: config.endHour
+            });
+            console.log("[DEBUG] Config saved to server:", config);
+            setIsConfigOpen(false);
+
+            // Notificar a Navi del cambio de configuración
+            emitNaviEvent({
+                type: 'config-changed',
+                startHour: config.startHour,
+                endHour: config.endHour
+            });
+        } catch (error) {
+            console.error("Failed to save config:", error);
+        }
+    };
 
     // Dynamic Hours Array
     const HOURS = Array.from(
@@ -198,6 +237,14 @@ export function TimeBlockPlanner() {
                 };
 
                 setBlocks(prev => [...prev, newBlock]);
+
+                // Notificar a Navi que se agregó un hábito
+                emitNaviEvent({
+                    type: 'habit-added',
+                    habitName: habit?.title,
+                    habitEmoji: habit?.emoji,
+                    totalDuration: duration
+                });
             } catch (error) {
                 console.error("Failed to save block", error);
             }
@@ -205,6 +252,10 @@ export function TimeBlockPlanner() {
     };
 
     const handleComplete = async (id: string) => {
+        // Capturar info del bloque para notificar a Navi
+        const block = blocks.find(b => b.id === id);
+        const habit = block ? getHabitById(block.habitId) : undefined;
+
         // 1. Optimistic Update
         setBlocks(prev => prev.map(b => b.id === id ? { ...b, completed: true } : b));
         setConfirmationModal({ isOpen: false, blockId: null, timeLeft: 0 });
@@ -212,6 +263,16 @@ export function TimeBlockPlanner() {
         // 2. API Call
         try {
             await timeblockService.updateStatus(id, true);
+
+            // Notificar a Navi que se completó un hábito
+            if (habit) {
+                emitNaviEvent({
+                    type: 'habit-completed',
+                    habitName: habit.title,
+                    habitEmoji: habit.emoji,
+                    totalDuration: block?.durationMin
+                });
+            }
         } catch (e) {
             console.error("Failed to complete block", e);
         }
@@ -239,30 +300,90 @@ export function TimeBlockPlanner() {
         setCollisionState({ isOpen: false, pendingBlock: null, conflictingIds: [] });
     };
 
-    const updateBlockDuration = (id: string, deltaMin: number) => {
-        setBlocks(prev => {
-            const block = prev.find(b => b.id === id);
-            if (!block) return prev;
+    const updateBlockDuration = async (id: string, deltaMin: number) => {
+        const block = blocks.find(b => b.id === id);
+        if (!block) return;
 
-            // 1. Calculate proposed duration
-            const proposedDuration = block.durationMin + deltaMin;
+        // Validar que el ID sea de MongoDB (24 caracteres hex) antes de persistir
+        const isMongoId = /^[a-f0-9]{24}$/i.test(id);
 
-            // 2. Find next block in the same hour to establish a "ceiling"
-            const nextBlock = prev
-                .filter(b => b.startHour === block.startHour && b.startMin > block.startMin && b.id !== id)
-                .sort((a, b) => a.startMin - b.startMin)[0];
+        const habit = getHabitById(block.habitId);
 
-            // 3. Calculate max allowed duration
-            // Space until next block OR end of hour (60)
-            const ceilingMin = nextBlock ? nextBlock.startMin : 60;
-            const maxAllowed = ceilingMin - block.startMin;
+        // ===== LÓGICA BIDIRECCIONAL =====
+        // Si el usuario quiere EXPANDIR (+deltaMin > 0), intentamos:
+        // 1. Primero expandir hacia adelante (derecha)
+        // 2. Si no hay espacio adelante, expandir hacia atrás (izquierda)
 
-            // 4. Clamp new duration
-            const newDuration = Math.max(15, Math.min(proposedDuration, maxAllowed));
+        // Calcular límites hacia adelante (derecha)
+        const blockEndMin = block.startMin + block.durationMin;
+        const nextBlock = blocks
+            .filter(b => b.startHour === block.startHour && b.startMin > block.startMin && b.id !== id)
+            .sort((a, b) => a.startMin - b.startMin)[0];
+        const ceilingMin = nextBlock ? nextBlock.startMin : 60;
+        const spaceAhead = ceilingMin - blockEndMin;
 
-            if (newDuration === block.durationMin) return prev; // No change
+        // Calcular límites hacia atrás (izquierda)
+        const prevBlock = blocks
+            .filter(b => b.startHour === block.startHour && b.startMin < block.startMin && b.id !== id)
+            .sort((a, b) => b.startMin - a.startMin)[0]; // Ordenar descendente
+        const floorMin = prevBlock ? (prevBlock.startMin + prevBlock.durationMin) : 0;
+        const spaceBehind = block.startMin - floorMin;
 
-            return prev.map(b => b.id === id ? { ...b, durationMin: newDuration } : b);
+        let newStartMin = block.startMin;
+        let newDuration = block.durationMin;
+
+        if (deltaMin > 0) {
+            // EXPANDIR: Primero intentar hacia adelante
+            if (spaceAhead >= deltaMin) {
+                // Hay espacio adelante - expandir normalmente
+                newDuration = block.durationMin + deltaMin;
+            } else if (spaceBehind >= deltaMin) {
+                // No hay espacio adelante pero SÍ hay atrás - expandir hacia izquierda
+                newStartMin = block.startMin - deltaMin;
+                newDuration = block.durationMin + deltaMin;
+            } else if (spaceAhead > 0) {
+                // Usar todo el espacio adelante disponible
+                newDuration = block.durationMin + spaceAhead;
+            } else if (spaceBehind > 0) {
+                // Usar todo el espacio atrás disponible
+                newStartMin = block.startMin - spaceBehind;
+                newDuration = block.durationMin + spaceBehind;
+            }
+            // Si no hay espacio en ningún lado, no hacer nada
+        } else {
+            // REDUCIR: Simplemente reducir duración (mínimo 15 min)
+            newDuration = Math.max(15, block.durationMin + deltaMin);
+        }
+
+        // Si no hubo cambio real, salir
+        if (newStartMin === block.startMin && newDuration === block.durationMin) return;
+
+        // Actualizar estado local
+        setBlocks(prev => prev.map(b =>
+            b.id === id
+                ? { ...b, startMin: newStartMin, durationMin: newDuration }
+                : b
+        ));
+
+        // Persistir en backend solo si es un ID válido de MongoDB
+        if (isMongoId) {
+            try {
+                console.log('[DEBUG] Persisting duration change:', { id, startHour: block.startHour, startMin: newStartMin, duration: newDuration });
+                await timeblockService.updateDuration(id, block.startHour, newStartMin, newDuration);
+            } catch (error) {
+                console.error("Failed to persist duration change:", error);
+            }
+        } else {
+            console.warn('[DEBUG] Skipping persistence - ID is not a valid MongoDB ObjectId:', id);
+        }
+
+        // Emitir evento a Navi
+        emitNaviEvent({
+            type: deltaMin > 0 ? 'habit-expanded' : 'habit-reduced',
+            habitName: habit?.title,
+            habitEmoji: habit?.emoji,
+            durationChange: deltaMin,
+            totalDuration: newDuration
         });
     };
 
@@ -270,7 +391,7 @@ export function TimeBlockPlanner() {
         setDurationModal({ isOpen: true, blockId: block.id, currentDuration: block.durationMin });
     };
 
-    const submitCustomDuration = () => {
+    const submitCustomDuration = async () => {
         if (!durationModal.blockId) return;
         const block = blocks.find(b => b.id === durationModal.blockId);
         if (!block) return;
@@ -287,16 +408,53 @@ export function TimeBlockPlanner() {
         // 3. Clamp (Min 5 mins, Max calculated above)
         const newDuration = Math.max(5, Math.min(durationModal.currentDuration, maxAllowed));
 
+        // 4. Actualizar estado local
         setBlocks(prev => prev.map(b => b.id === durationModal.blockId ? { ...b, durationMin: newDuration } : b));
         setDurationModal({ isOpen: false, blockId: null, currentDuration: 0 });
+
+        // 5. Persistir en el servidor
+        const isMongoId = /^[a-f0-9]{24}$/i.test(block.id);
+        if (isMongoId) {
+            try {
+                await timeblockService.updateDuration(block.id, block.startHour, block.startMin, newDuration);
+                console.log('[DEBUG] Duration saved to server:', { id: block.id, duration: newDuration });
+            } catch (error) {
+                console.error("Failed to persist duration from modal:", error);
+            }
+        }
+
+        // 6. Emitir evento a Navi
+        const habit = getHabitById(block.habitId);
+        if (newDuration !== block.durationMin) {
+            emitNaviEvent({
+                type: newDuration > block.durationMin ? 'habit-expanded' : 'habit-reduced',
+                habitName: habit?.title,
+                habitEmoji: habit?.emoji,
+                durationChange: newDuration - block.durationMin,
+                totalDuration: newDuration
+            });
+        }
     };
 
     const removeBlock = async (id: string) => {
+        // Capturar info del bloque antes de eliminarlo (para notificar a Navi)
+        const blockToRemove = blocks.find(b => b.id === id);
+        const habit = blockToRemove ? getHabitById(blockToRemove.habitId) : undefined;
+
         // Optimistic update
         setBlocks(prev => prev.filter(b => b.id !== id));
 
         try {
             await timeblockService.delete(id);
+
+            // Notificar a Navi que se eliminó un hábito
+            if (habit) {
+                emitNaviEvent({
+                    type: 'habit-removed',
+                    habitName: habit.title,
+                    habitEmoji: habit.emoji
+                });
+            }
         } catch (error) {
             console.error("Failed to delete block", error);
         }
@@ -508,7 +666,7 @@ export function TimeBlockPlanner() {
 
                             <div className="flex gap-3 mt-4">
                                 <button onClick={() => setDurationModal({ isOpen: false, blockId: null, currentDuration: 0 })} className="flex-1 py-2 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700">Cancelar</button>
-                                <button onClick={submitCustomDuration} className="flex-1 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500">Guardar</button>
+                                <button onClick={submitCustomDuration} className="flex-1 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500">Confirmar</button>
                             </div>
                         </div>
                     </div>
@@ -552,7 +710,8 @@ export function TimeBlockPlanner() {
                         </div>
 
                         <div className="flex gap-3 mt-6">
-                            <button onClick={() => setIsConfigOpen(false)} className="flex-1 py-2 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700">Cerrar</button>
+                            <button onClick={() => setIsConfigOpen(false)} className="flex-1 py-2 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700">Cancelar</button>
+                            <button onClick={saveConfigToServer} className="flex-1 py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-500">Confirmar</button>
                         </div>
                     </div>
                 </div>
@@ -658,8 +817,8 @@ export function TimeBlockPlanner() {
                                     blocks.some(b => b.startHour === hour && b.id === draggingBlockId) ? "z-50" : "z-0"
                                 )}
                             >
-                                {/* Time Label - Added 'border border-red-500' for identification */}
-                                <div className="w-32 py-4 pr-8 text-right border-r border-zinc-800/40 shrink-0 sticky left-0 bg-[#13151b]/95 z-20 backdrop-blur-sm border border-red-500">
+                                {/* Time Label */}
+                                <div className="w-32 py-4 pr-8 text-right border-r border-zinc-800/40 shrink-0 sticky left-0 bg-[#13151b]/95 z-20 backdrop-blur-sm">
                                     <span className="text-2xl font-bold text-zinc-500 font-mono leading-none tracking-tighter block">{hour}:00</span>
                                 </div>
 

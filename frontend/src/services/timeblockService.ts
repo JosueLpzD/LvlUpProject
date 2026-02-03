@@ -68,5 +68,28 @@ export const timeblockService = {
         });
 
         if (!response.ok) throw new Error("Failed to delete block");
+    },
+
+    /**
+     * Actualiza la duración de un bloque (start_time y end_time).
+     * Se usa cuando el usuario expande/reduce un bloque con los botones +/-.
+     */
+    async updateDuration(id: string, startHour: number, startMin: number, durationMin: number): Promise<void> {
+        // Calcular start_time
+        const startTime = formatTime(startHour, startMin);
+
+        // Calcular end_time
+        const startTotal = startHour * 60 + startMin;
+        const endTotal = startTotal + durationMin;
+        const endHour = Math.floor(endTotal / 60);
+        const endMin = endTotal % 60;
+        const endTime = formatTime(endHour, endMin);
+
+        const response = await fetch(
+            `${API_URL}/timeblocks/${id}/duration?start_time=${startTime}&end_time=${endTime}`,
+            { method: "PUT" }
+        );
+
+        if (!response.ok) throw new Error("Failed to update duration");
     }
 };
