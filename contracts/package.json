@@ -1,0 +1,23 @@
+{
+    "name": "lvlup-contracts",
+    "version": "0.1.0",
+    "description": "Smart contracts for LvlUp productivity rewards on Base",
+    "scripts": {
+        "build": "forge build",
+        "test": "forge test -vvv",
+        "test:coverage": "forge coverage",
+        "deploy:testnet": "forge script script/Deploy.s.sol --rpc-url base_sepolia --broadcast",
+        "deploy:mainnet": "forge script script/Deploy.s.sol --rpc-url base --broadcast --verify"
+    },
+    "devDependencies": {
+        "@openzeppelin/contracts": "^5.0.0"
+    },
+    "keywords": [
+        "solidity",
+        "base",
+        "blockchain",
+        "rewards",
+        "nft"
+    ],
+    "license": "MIT"
+}
