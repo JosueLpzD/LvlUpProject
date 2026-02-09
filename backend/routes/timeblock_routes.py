@@ -23,12 +23,27 @@ async def create_timeblock(block: TimeBlock):
     return {"id": str(result.inserted_id), "message": "Bloque creado"}
 
 @timeblock_router.get("/timeblocks", response_model=List[TimeBlock])
-async def get_timeblocks():
-    # 1. Buscar todos los documentos
-    # 'find({})' significa "búscalo todo". 'to_list(100)' limita a 100 resultados por seguridad.
-    blocks = await database.timeblocks.find({}).to_list(100)
+async def get_timeblocks(date: str = None):
+    """
+    Obtiene timeblocks. Si se proporciona 'date', filtra por ese día.
+    Formato date: "2026-02-05" (ISO 8601 YYYY-MM-DD)
     
-    # FastAPI se encarga automágicamente de convertirlos a JSON
+    Ejemplos:
+    - GET /timeblocks → Devuelve TODOS los bloques
+    - GET /timeblocks?date=2026-02-05 → Solo bloques del 5 de febrero
+    """
+    # 1. Construir query de filtrado
+    if date:
+        # Filtrar por fecha específica
+        query = {"date": date}
+    else:
+        # Sin filtro, devuelve todos (comportamiento actual para compatibilidad)
+        query = {}
+    
+    # 2. Buscar documentos con el filtro aplicado
+    blocks = await database.timeblocks.find(query).to_list(100)
+    
+    # 3. FastAPI se encarga automágicamente de convertirlos a JSON
     # Truco: Mapeamos el "_id" de Mongo al "id" de nuestro modelo
     for block in blocks:
         block["id"] = str(block["_id"])

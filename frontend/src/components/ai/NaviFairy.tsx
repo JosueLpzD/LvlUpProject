@@ -229,7 +229,7 @@ export function NaviFairy() {
 
     // ==================== RENDER ====================
     return (
-        <div className="fixed z-[999] bottom-10 right-10 pointer-events-none">
+        <div className="fixed z-[90] bottom-10 right-10 pointer-events-none">
 
             {/* ✨ PARTÍCULAS DE DESTELLOS */}
             {particles.map(particle => (
@@ -286,10 +286,10 @@ export function NaviFairy() {
                                 }}
                             >
                                 {/* Burbuja estilo pensamiento */}
-                                <div className="relative max-w-xs whitespace-nowrap">
+                                <div className="relative w-64">
                                     {/* Contenido de la burbuja */}
                                     <div className="bg-gradient-to-br from-blue-500/90 to-indigo-600/90 backdrop-blur-xl px-4 py-3 rounded-2xl rounded-br-sm shadow-2xl border border-blue-400/30">
-                                        <p className="text-white text-sm font-medium leading-relaxed">
+                                        <p className="text-white text-sm font-medium leading-relaxed break-words">
                                             {thoughtMessage.text}
                                         </p>
                                     </div>
@@ -335,8 +335,8 @@ export function NaviFairy() {
                             initial={{ opacity: 0, scale: 0.8, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: -20 }}
                             exit={{ opacity: 0, scale: 0.8, y: 20 }}
-                            className="absolute bottom-20 right-0 w-80 bg-[#1a1c26]/95 backdrop-blur-xl border border-blue-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
-                            style={{ height: '400px' }}
+                            className="absolute bottom-20 right-0 w-[90vw] max-w-sm md:w-80 bg-[#1a1c26]/95 backdrop-blur-xl border border-blue-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+                            style={{ maxHeight: '70vh' }}
                         >
                             {/* Header */}
                             <div className="p-3 bg-blue-500/10 border-b border-blue-500/20 flex justify-between items-center">

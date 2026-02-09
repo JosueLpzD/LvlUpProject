@@ -33,7 +33,7 @@ export function CharacterHUD() {
     }
 
     return (
-        <div className="sticky top-0 z-50 w-full bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-zinc-800 shadow-lg p-4" data-component="CharacterHUD">
+        <div className="sticky top-0 z-[100] w-full bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-zinc-800 shadow-lg p-4" data-component="CharacterHUD">
             <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
 
                 {/* Avatar & Level */}

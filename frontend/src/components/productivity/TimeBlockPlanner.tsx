@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import { Plus, GripVertical, Clock, Trash2, Sparkles, CheckCircle, XCircle, Settings } from "lucide-react";
+import { Plus, GripVertical, Clock, Trash2, Sparkles, CheckCircle, XCircle, Settings, ChevronLeft, ChevronRight } from "lucide-react";
 import { timeblockService, TimeBlockDTO } from "@/services/timeblockService";
 import { configService } from "@/services/configService";
 import { emitNaviEvent } from "@/lib/naviEvents";
@@ -32,23 +32,24 @@ interface TimeBlock {
 export function TimeBlockPlanner() {
     const [blocks, setBlocks] = useState<TimeBlock[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [selectedDate, setSelectedDate] = useState(new Date());
 
-    // 1. Load from API on Mount (Goodbye LocalStorage!)
+    // 1. Load from API on Mount
     useEffect(() => {
         const loadBlocks = async () => {
             try {
-                const apiBlocks = await timeblockService.getAll();
+                const dateStr = selectedDate.toISOString().split('T')[0]; // "2026-02-05"
+                const apiBlocks = await timeblockService.getByDate(dateStr);
                 // Transform API DTO -> Frontend Block
                 const transformed: TimeBlock[] = apiBlocks.map(dto => {
                     const [sh, sm] = dto.start_time.split(':').map(Number);
                     const [eh, em] = dto.end_time.split(':').map(Number);
                     const startTotal = sh * 60 + sm;
                     const endTotal = eh * 60 + em;
-                    // Handle day wrap properly if needed, for now assume same day
                     const duration = endTotal - startTotal;
 
                     return {
-                        id: dto.id || Math.random().toString(), // Fallback if no ID
+                        id: dto.id || Math.random().toString(),
                         startHour: sh,
                         startMin: sm,
                         durationMin: duration > 0 ? duration : 30,
@@ -64,7 +65,7 @@ export function TimeBlockPlanner() {
             }
         };
         loadBlocks();
-    }, []);
+    }, [selectedDate]); // Recargar cuando cambia la fecha
 
     // Customizable Time Range State (Default 5 AM - 11 PM)
     const [config, setConfig] = useState({ startHour: 5, endHour: 21 }); // 21 is 9 PM, so range ends at 10 PM block
@@ -179,6 +180,43 @@ export function TimeBlockPlanner() {
 
     // Track dragging to elevate z-index of the active row
     const [draggingBlockId, setDraggingBlockId] = useState<string | null>(null);
+
+    // Helper functions para navegación de fechas
+    const goToPreviousDay = () => {
+        const newDate = new Date(selectedDate);
+        newDate.setDate(newDate.getDate() - 1);
+        setSelectedDate(newDate);
+    };
+
+    const goToNextDay = () => {
+        const newDate = new Date(selectedDate);
+        newDate.setDate(newDate.getDate() + 1);
+        const today = new Date();
+        if (newDate <= today) {
+            setSelectedDate(newDate);
+        }
+    };
+
+    const isToday = () => {
+        const today = new Date();
+        return selectedDate.toDateString() === today.toDateString();
+    };
+
+    const getDayLabel = (date: Date) => {
+        const today = new Date();
+        const diffTime = today.getTime() - date.getTime();
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 1) return "Ayer";
+        if (diffDays === 2) return "Hace 2 días";
+        if (diffDays > 2) return `Hace ${diffDays} días`;
+        return "Hoy";
+    };
+
+    const getCompletedCount = () => {
+        const completedCount = blocks.filter(b => b.completed).length;
+        return `${completedCount}/${blocks.length}`;
+    };
 
     // Helper: Check for overlaps (Global Time)
     const checkOverlap = (newBlock: TimeBlock, excludeBlockId?: string) => {
@@ -506,7 +544,7 @@ export function TimeBlockPlanner() {
     };
 
     return (
-        <div className="flex flex-row h-full gap-6 p-2" ref={constraintsRef} data-component="TimeBlockPlanner">
+        <div className="flex flex-row gap-6 p-2" ref={constraintsRef} data-component="TimeBlockPlanner">
 
             {/* COMPLETION CONFIRMATION MODAL */}
             {confirmationModal.isOpen && (
@@ -717,8 +755,8 @@ export function TimeBlockPlanner() {
                 </div>
             )}
 
-            {/* 1. Habit Compact Palette (Sidebar) - Added z-50 for drag visibility */}
-            <div className="w-20 md:w-24 flex flex-col items-center gap-4 bg-[#181a25]/90 backdrop-blur-xl border border-zinc-800 py-6 rounded-3xl shadow-2xl shrink-0 h-[85vh] sticky top-4 z-50">
+            {/* 1. Habit Compact Palette (Sidebar) - Ajustado para responsive */}
+            <div className="w-16 md:w-20 flex flex-col items-center gap-4 bg-[#181a25]/90 backdrop-blur-xl border border-zinc-800 py-6 rounded-3xl shadow-2xl shrink-0 h-[calc(100vh-8rem)] md:h-[85vh] sticky top-24 md:top-4 z-40">
                 <div className="mb-2 flex flex-col items-center">
                     <div className="p-2 rounded-full bg-amber-500/10 text-amber-500 mb-2">
                         <Sparkles size={20} />
@@ -729,7 +767,7 @@ export function TimeBlockPlanner() {
                 <div className="flex flex-col gap-4 w-full px-2 overflow-y-auto no-scrollbar items-center pb-4">
                     <button
                         onClick={() => setIsAddHabitOpen(true)}
-                        className="w-14 h-14 md:w-16 md:h-16 rounded-2xl border-2 border-dashed border-zinc-700 hover:border-amber-500 hover:bg-amber-500/10 flex items-center justify-center transition-all shrink-0 text-zinc-500 hover:text-amber-500"
+                        className="w-12 h-12 md:w-14 md:h-14 rounded-2xl border-2 border-dashed border-zinc-700 hover:border-amber-500 hover:bg-amber-500/10 flex items-center justify-center transition-all shrink-0 text-zinc-500 hover:text-amber-500"
                         title="Añadir nuevo hábito"
                     >
                         <Plus size={24} />
@@ -768,7 +806,7 @@ export function TimeBlockPlanner() {
                                 }
                             }}
                             className={cn(
-                                "relative w-14 h-14 md:w-16 md:h-16 rounded-2xl border flex items-center justify-center cursor-grab active:cursor-grabbing transition-all shrink-0",
+                                "relative w-12 h-12 md:w-14 md:h-14 rounded-2xl border flex items-center justify-center cursor-grab active:cursor-grabbing transition-all shrink-0",
                                 habit.color.replace('text-', '').split(' ')[0], // bg color
                                 habit.color.split(' ').find(c => c.startsWith('border-')), // border color
                                 (habit as any).shadow
@@ -781,17 +819,58 @@ export function TimeBlockPlanner() {
             </div>
 
             {/* 2. Timeline Grid (Main Stage) */}
-            <div className="flex-1 bg-[#13151b] border border-zinc-800 rounded-[2rem] shadow-2xl relative flex flex-col h-full overflow-hidden">
+            <div className="flex-1 bg-[#13151b] border border-zinc-800 rounded-[2rem] shadow-2xl relative flex flex-col overflow-hidden">
                 {/* Header Date */}
                 <div className="px-8 py-6 border-b border-zinc-800 flex justify-between items-center bg-[#181a25] shrink-0 z-20">
-                    <div>
-                        <h2 className="text-4xl font-black text-white tracking-tighter capitalize">
-                            {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' })}
-                        </h2>
-                        <div className="flex items-center gap-3 mt-1">
-                            <span className="text-teal-400 font-bold bg-teal-400/10 px-2 py-0.5 rounded text-sm">Hoy</span>
-                            <span className="text-zinc-500 font-medium text-sm">{(config.endHour - config.startHour + 1)} horas activas</span>
+                    <div className="flex items-center gap-4">
+                        {/* Flecha izquierda */}
+                        <button
+                            onClick={goToPreviousDay}
+                            className="p-2 rounded-lg bg-zinc-800/50 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-all"
+                            title="Día anterior"
+                        >
+                            <ChevronLeft size={20} />
+                        </button>
+
+                        <div>
+                            <h2 className="text-4xl font-black text-white tracking-tighter capitalize">
+                                {selectedDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' })}
+                            </h2>
+                            <div className="flex items-center gap-3 mt-1">
+                                {/* Badge contextual */}
+                                {isToday() ? (
+                                    <span className="text-teal-400 font-bold bg-teal-400/10 px-2 py-0.5 rounded text-sm">
+                                        Hoy
+                                    </span>
+                                ) : (
+                                    <span className="text-zinc-400 font-medium bg-zinc-800/50 px-2 py-0.5 rounded text-sm">
+                                        {getDayLabel(selectedDate)}
+                                    </span>
+                                )}
+
+                                {/* Contador de progreso para días pasados */}
+                                {!isToday() ? (
+                                    <span className="text-zinc-500 font-medium text-sm">
+                                        {getCompletedCount()} completados
+                                    </span>
+                                ) : (
+                                    <span className="text-zinc-500 font-medium text-sm">
+                                        {(config.endHour - config.startHour + 1)} horas activas
+                                    </span>
+                                )}
+                            </div>
                         </div>
+
+                        {/* Flecha derecha (solo si no es hoy) */}
+                        {!isToday() && (
+                            <button
+                                onClick={goToNextDay}
+                                className="p-2 rounded-lg bg-zinc-800/50 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-all"
+                                title="Día siguiente"
+                            >
+                                <ChevronRight size={20} />
+                            </button>
+                        )}
                     </div>
 
                     {/* Settings Button */}
@@ -805,7 +884,7 @@ export function TimeBlockPlanner() {
                 </div>
 
                 {/* Scrollable Timeline */}
-                <div className="flex-1 relative overflow-y-auto overflow-x-hidden p-0 custom-scrollbar">
+                <div className="relative overflow-x-hidden p-0">
                     {HOURS.map(hour => {
                         return (
                             <div

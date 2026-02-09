@@ -19,9 +19,9 @@ export default function Home() {
       <div className="w-full h-full overflow-y-auto custom-scrollbar p-6 flex flex-col gap-10" data-component="PageContainer">
 
         {/* 1. TimeBlock Planner (Priority #1) */}
-        <section className="w-full flex-1 min-h-[85vh] flex flex-col gap-4" data-component="TimeBlockSection">
+        <section className="w-full flex flex-col gap-4" data-component="TimeBlockSection">
           <h2 className="text-xl font-bold text-zinc-400 uppercase tracking-widest pl-2 border-l-4 border-amber-500">Planificador del Día</h2>
-          <div className="flex-1 border border-zinc-800/50 rounded-3xl overflow-hidden shadow-2xl bg-[#13151b]/50 relative">
+          <div className="border border-zinc-800/50 rounded-3xl overflow-hidden shadow-2xl bg-[#13151b]/50 relative">
             <TimeBlockPlanner />
           </div>
         </section>

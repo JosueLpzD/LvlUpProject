@@ -1,5 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
+from datetime import datetime
 
 # BaseModel es la "plantilla maestra" de FastAPI para validar datos.
 class TimeBlock(BaseModel):
@@ -10,6 +11,10 @@ class TimeBlock(BaseModel):
     # Por ahora usamos texto (str) para las horas.
     start_time: str
     end_time: str
+    
+    # Fecha del bloque en formato ISO "YYYY-MM-DD"
+    # Por defecto, se asigna la fecha de hoy
+    date: str = Field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d"))
     
     # "bool = False" significa que es opcional.
     completed: bool = False

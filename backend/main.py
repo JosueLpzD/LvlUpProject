@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routes.timeblock_routes import timeblock_router
 from routes.navi_routes import navi_router
 from routes.config_routes import config_router
+from routes.rewards_routes import rewards_router
 
 app = FastAPI()
 # Configurar CORS (Para que el Frontend puerto 3000 pueda hablar con el Backend puerto 8000)
@@ -23,3 +24,4 @@ def read_root():
 app.include_router(timeblock_router)
 app.include_router(navi_router)
 app.include_router(config_router)
+app.include_router(rewards_router)

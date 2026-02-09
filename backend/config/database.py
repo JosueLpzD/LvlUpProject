@@ -23,3 +23,10 @@ database = client[database_name]
 # Explicación Lógica:
 # Ahora, cada vez que otro archivo necesite datos, importará esta variable 'database'.
 # Es como tener una tubería ya instalada hacia tu depósito de información.
+
+# 5. Definir Colecciones (Las Carpetas Específicas)
+# Cada colección es como una carpeta dentro de la base de datos
+# donde guardamos un tipo específico de información
+
+# Colección de recompensas blockchain
+rewards_collection = database["rewards"]

@@ -1,88 +1,213 @@
-# 🎮 LvlUp - Productivity App
+# 🎮 LvlUp - App de Productividad Gamificada
 
-Aplicación de productividad gamificada con recompensas blockchain.
-
----
-
-## 🏗️ Estructura del Proyecto
-
-```
-lvlup/
-├── frontend/     # Next.js 16 + React 19
-├── backend/      # FastAPI + MongoDB
-├── contracts/    # Smart Contracts (Foundry + Solidity)
-└── docs/         # Documentación
-```
+Una app que convierte tus tareas diarias en un juego con recompensas blockchain.
 
 ---
 
-## 🚀 Quick Start
+## 📋 ¿Qué necesito instalar antes?
 
-### Frontend
+Descarga e instala estos programas (haz clic en cada enlace):
+
+| Programa | ¿Para qué sirve? | Descargar |
+|----------|------------------|-----------|
+| **Node.js** | Ejecutar el frontend | [👉 Descargar Node.js](https://nodejs.org) |
+| **Python** | Ejecutar el backend | [👉 Descargar Python](https://python.org) |
+| **MongoDB** | Base de datos | [👉 Descargar MongoDB](https://mongodb.com/try/download/community) |
+| **Git** | Control de versiones | [👉 Descargar Git](https://git-scm.com) |
+
+> 💡 **Tip**: Al instalar Python, marca la casilla **"Add Python to PATH"**.
+
+---
+
+## 🚀 Instalación (Solo la Primera Vez)
+
+### Paso 1: Descargar el proyecto
+
+Abre una terminal y escribe:
+```bash
+git clone https://github.com/JosueLpzD/LvlUpProject.git
+cd LvlUpProject
+```
+
+### Paso 2: Instalar el Frontend
+
 ```bash
 cd frontend
 npm install
-cp .env.example .env.local
-npm run dev
 ```
 
-### Backend
+> ⏱️ Esto puede tardar unos minutos. Espera a que termine.
+
+### Paso 3: Instalar el Backend
+
+Primero, entra a la carpeta backend:
+```bash
+cd ../backend
+```
+
+Luego crea el entorno virtual de Python:
+```bash
+python -m venv venv
+```
+
+Ahora **activa el entorno** (elige según tu terminal):
+
+| Terminal | Comando |
+|----------|---------|
+| **Git Bash** (Windows) | `source venv/Scripts/activate` |
+| **PowerShell** (Windows) | `.\venv\Scripts\Activate.ps1` |
+| **Mac / Linux** | `source venv/bin/activate` |
+
+> ✅ Sabrás que funcionó cuando veas `(venv)` al inicio de tu línea.
+
+Finalmente, instala las dependencias:
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## 🖥️ Iniciar la App (Cada vez que trabajes)
+
+Necesitas **2 terminales abiertas** al mismo tiempo:
+
+### 🟢 Terminal 1: Frontend
+
+```bash
+cd frontend
+npm run dev
+```
+📍 **Abre en tu navegador:** http://localhost:3000
+
+---
+
+### 🟣 Terminal 2: Backend
+
+Elige los comandos según tu terminal:
+
+#### 👉 Si usas **Git Bash** (Windows):
 ```bash
 cd backend
-pip install -r requirements.txt
-cp .env.example .env
+source venv/Scripts/activate
 uvicorn main:app --reload
 ```
 
-### Contracts (Requiere Foundry)
+#### 👉 Si usas **PowerShell** (Windows):
+```powershell
+cd backend
+.\venv\Scripts\Activate.ps1
+uvicorn main:app --reload
+```
+
+#### 👉 Si usas **Mac o Linux**:
 ```bash
-cd contracts
-forge install
-forge build
+cd backend
+source venv/bin/activate
+uvicorn main:app --reload
+```
+
+📍 **API disponible en:** http://localhost:8000
+
+> ✅ Sabrás que funciona cuando veas: `Uvicorn running on http://127.0.0.1:8000`
+
+---
+
+## ✅ Verificar que todo funciona
+
+| Servicio | URL | Estado esperado |
+|----------|-----|-----------------|
+| Frontend | http://localhost:3000 | Ver la app |
+| Backend | http://localhost:8000 | Ver `{"message": "LvlUp API"}` |
+| API Docs | http://localhost:8000/docs | Documentación interactiva |
+
+---
+
+## ⚠️ Solución de Problemas Comunes
+
+### ❌ "uvicorn: command not found"
+**Problema:** El entorno virtual no está activado.
+
+**Solución:** Activa el entorno primero:
+```bash
+# Git Bash
+source venv/Scripts/activate
+
+# PowerShell
+.\venv\Scripts\Activate.ps1
 ```
 
 ---
 
-## 🔗 Blockchain Integration
+### ❌ "cannot be loaded because running scripts is disabled"
+**Problema:** PowerShell bloquea scripts.
 
-Este proyecto usa **Base** (Layer 2 de Coinbase) para recompensas on-chain.
-
-| Feature | Descripción |
-|---------|-------------|
-| 💰 $LVLUP Token | Token ERC-20 de recompensas |
-| 🏆 Achievement NFTs | NFTs por logros especiales |
-| 🔐 Secure Claims | Sistema de claims con firma backend |
-
-### Stack Web3
-- **OnchainKit** v1.0.0 (SDK oficial de Coinbase)
-- **Wagmi** + **Viem** (React hooks para blockchain)
-- **Foundry** (Smart contract development)
-
-### Setup Blockchain
-Ver [docs/BLOCKCHAIN_SETUP.md](./docs/BLOCKCHAIN_SETUP.md)
+**Solución:** Ejecuta este comando UNA vez:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
 
 ---
 
-## 📚 Documentación
+### ❌ "Module not found" o "No module named..."
+**Problema:** Faltan dependencias.
 
-| Documento | Contenido |
-|-----------|-----------|
-| [BLOCKCHAIN_SETUP.md](./docs/BLOCKCHAIN_SETUP.md) | Configurar wallet y entorno |
-| [CONTRIBUTING.md](./docs/CONTRIBUTING.md) | Guía para contribuidores |
-| [ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Arquitectura del sistema |
+**Solución:** Reinstala:
+```bash
+# Frontend
+cd frontend
+npm install
+
+# Backend (con venv activado)
+cd backend
+pip install -r requirements.txt
+```
 
 ---
 
-## 🛠️ Tech Stack
+### ❌ La app no carga datos
+**Problema:** El backend no está corriendo.
+
+**Solución:** Verifica que ambas terminales estén activas:
+- Terminal 1: Frontend corriendo ✅
+- Terminal 2: Backend corriendo ✅
+
+---
+
+## 🔗 Configuración Blockchain (Opcional)
+
+Solo necesitas esto si quieres usar las funciones de recompensas:
+
+1. Obtén una API key en [Coinbase Developer Platform](https://portal.cdp.coinbase.com)
+2. Crea el archivo `frontend/.env.local` con:
+   ```
+   NEXT_PUBLIC_ONCHAINKIT_API_KEY=tu_api_key_aqui
+   ```
+3. Instala [MetaMask](https://metamask.io) o [Coinbase Wallet](https://www.coinbase.com/wallet)
+
+Ver [docs/BLOCKCHAIN_SETUP.md](./docs/BLOCKCHAIN_SETUP.md) para más detalles.
+
+---
+
+## 🛠️ Tecnologías Usadas
 
 | Capa | Tecnologías |
 |------|-------------|
-| Frontend | Next.js 16, React 19, Tailwind CSS, OnchainKit |
-| Backend | FastAPI, MongoDB, Pydantic |
-| Blockchain | Base (L2), Solidity 0.8.24, Foundry |
+| Frontend | Next.js 16, React 19, Tailwind CSS |
+| Backend | FastAPI, MongoDB, Python |
+| Blockchain | Base (L2 de Coinbase), Solidity |
 
 ---
 
-## 📄 License
+## 📚 Documentación Adicional
 
-MIT
+| Documento | Descripción |
+|-----------|-------------|
+| [ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Cómo está organizado el código |
+| [BLOCKCHAIN_SETUP.md](./docs/BLOCKCHAIN_SETUP.md) | Configurar wallet y blockchain |
+| [CONTRIBUTING.md](./docs/CONTRIBUTING.md) | Cómo contribuir al proyecto |
+
+---
+
+## 📄 Licencia
+
+MIT - Puedes usar este código libremente.

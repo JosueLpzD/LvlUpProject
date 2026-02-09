@@ -7,6 +7,7 @@ export interface TimeBlockDTO {
     start_time: string;
     end_time: string;
     completed: boolean;
+    date: string; // Formato ISO: "2026-02-05"
 }
 
 // Helper to convert time format (8:30 -> "08:30")
@@ -18,6 +19,13 @@ export const timeblockService = {
     async getAll(): Promise<TimeBlockDTO[]> {
         const response = await fetch(`${API_URL}/timeblocks`);
         if (!response.ok) throw new Error("Failed to fetch blocks");
+        return response.json();
+    },
+
+    async getByDate(date: string): Promise<TimeBlockDTO[]> {
+        // date formato: "2026-02-05" (ISO 8601)
+        const response = await fetch(`${API_URL}/timeblocks?date=${date}`);
+        if (!response.ok) throw new Error("Failed to fetch blocks for date");
         return response.json();
     },
 
@@ -33,7 +41,8 @@ export const timeblockService = {
             habit_id: block.habitId,
             start_time: formatTime(block.startHour, block.startMin),
             end_time: formatTime(endHour, endMin),
-            completed: false
+            completed: false,
+            date: new Date().toISOString().split('T')[0] // "2026-02-05"
         };
 
         const response = await fetch(`${API_URL}/timeblocks`, {
