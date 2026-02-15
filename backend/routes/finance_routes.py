@@ -2,8 +2,10 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 from services.blockchain_signer import signer_service
+from config.database import database
 import os
 import time
+from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/finance", tags=["Finance & Staking"])
 
@@ -21,23 +23,50 @@ class SettlementResponse(BaseModel):
     user_address: str
     week_id: int
 
-# --- Mock Service (Simulación de Lógica de Negocio) ---
-# En un futuro, esto leerá de MongoDB para verificar si completó los hábitos.
-def calculate_payout(user_address: str, week_id: int) -> int:
+# --- Real Business Logic (MongoDB) ---
+
+def get_week_dates(week_id: int, year: int = 2026):
+    """Retorna lista de fechas (strings) para una semana ISO dada."""
+    # Lunes de la semana
+    start_date = datetime.strptime(f'{year}-W{week_id}-1', "%Y-W%W-%w")
+    dates = []
+    for i in range(7):
+        day = start_date + timedelta(days=i)
+        dates.append(day.strftime("%Y-%m-%d"))
+    return dates
+
+async def calculate_payout(user_address: str, week_id: int) -> int:
     """
-    Calcula cuánto devolver al usuario basándose en su rendimiento.
-    Retorna cantidad en Wei.
-    Simulación: Siempre devuelve el 90% (Penalización del 10%).
+    Calcula cuánto devolver al usuario basándose en su rendimiento REAL en MongoDB.
+    Regla: Si cumple >= 5 hábitos en la semana, gana. Si no, pierde 10%.
     """
-    # TODO: Leer deposito real del contrato o BD
-    DEPOSIT_MOCK = 10**18  # 1 ETH
+    DEPOSIT_AMOUNT = 10**18  # 1 ETH (En prod leeríamos esto del contrato usando Web3)
     
-    # TODO: Leer cumplimiento de hábitos de la semana
-    # habits_completed = db.count_completed_habits(user, week_id)
-    # habits_required = 7
+    # 1. Obtener fechas de la semana solicitada
+    # Si week_id es 0 o 1 (default del frontend), usaremos la semana actual para facilitar tests
+    current_iso_week = datetime.now().isocalendar()[1]
+    target_week = week_id if week_id > 1 else current_iso_week
+    week_dates = get_week_dates(target_week, datetime.now().year)
     
-    # Lógica de ejemplo: 90% de retorno
-    return int(DEPOSIT_MOCK * 0.9)
+    # 2. Contar hábitos completados en esa semana
+    # Nota: En este prototipo monousuario, no filtramos por user_id en TimeBlocks.
+    # En producción, TimeBlock necesitaría un campo 'user_address'.
+    completed_count = await database.timeblocks.count_documents({
+        "date": {"$in": week_dates},
+        "completed": True
+    })
+    
+    # 3. Aplicar regla de negocio
+    GOAL_PER_WEEK = 5
+    
+    print(f"💰 Payout Debug: Semana {target_week} | Completados: {completed_count}/{GOAL_PER_WEEK}")
+    
+    if completed_count >= GOAL_PER_WEEK:
+        # ¡Éxito! Devuelve 100% + Recompensa (simulada aquí como 0% extra por ahora)
+        return int(DEPOSIT_AMOUNT * 1.0)
+    else:
+        # Fallo: Devuelve solo 90% (Penalización 10%)
+        return int(DEPOSIT_AMOUNT * 0.9)
 
 # --- Endpoints ---
 
@@ -49,7 +78,7 @@ async def sign_settlement(req: SettlementRequest):
     """
     try:
         # 1. Validar lógica de negocio (Off-Chain)
-        amount_to_return = calculate_payout(req.user_address, req.week_id)
+        amount_to_return = await calculate_payout(req.user_address, req.week_id)
         
         # 2. Configurar parámetros de seguridad
         deadline = int(time.time()) + 3600  # Firma válida por 1 hora
