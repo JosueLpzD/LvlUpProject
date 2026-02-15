@@ -3,7 +3,8 @@
  * Permite guardar y cargar preferencias como el horario del planificador.
  */
 
-const API_BASE = "http://localhost:8000";
+// Usa la variable de entorno para conectar con el backend (local o Cloudflare)
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // Tipo para la configuración del usuario
 export interface UserConfig {

@@ -66,7 +66,9 @@ export function NaviFairy() {
                 esAutomatico: isAutomatic
             };
 
-            const response = await fetch("http://localhost:8000/navi/chat", {
+            // Usa variable de entorno para conectar al backend (local o Cloudflare)
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const response = await fetch(`${apiUrl}/navi/chat`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ message: userMessage, context })

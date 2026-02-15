@@ -6,6 +6,7 @@ import { SkillTrack } from "@/components/progression/SkillTrack";
 import { LootShop } from "@/components/marketplace/LootShop";
 import { FloatingPomodoro } from "@/components/productivity/FloatingPomodoro";
 import { WeeklyCalendarView } from "@/components/dashboard/WeeklyCalendarView";
+import { ProgressCharts } from "@/components/dashboard/ProgressCharts";
 import { ActiveQuestBoard } from "@/components/dashboard/ActiveQuestBoard";
 import { NaviFairy } from "@/components/ai/NaviFairy";
 
@@ -26,7 +27,13 @@ export default function Home() {
           </div>
         </section>
 
-        {/* 2. Weekly Calendar (Priority #2) */}
+        {/* 2. Progress Charts (Priority #2) - Gráficas de progreso */}
+        <section className="w-full shrink-0" data-component="ProgressSection">
+          <h2 className="text-xl font-bold text-zinc-400 uppercase tracking-widest pl-2 border-l-4 border-violet-500 mb-4">Progreso Semanal</h2>
+          <ProgressCharts />
+        </section>
+
+        {/* 3. Weekly Calendar (Priority #3) */}
         <section className="w-full shrink-0" data-component="CalendarSection">
           <h2 className="text-xl font-bold text-zinc-400 uppercase tracking-widest pl-2 border-l-4 border-teal-500 mb-4">Calendario Semanal</h2>
           <div className="bg-black/20 border border-zinc-800/50 rounded-2xl p-4">

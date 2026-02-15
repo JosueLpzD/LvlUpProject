@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # 2. Obtener la URL de conexión
-# os.getenv funciona como preguntar: "¿Hay algo guardado bajo el nombre 'MONGODB_URL'?"
-mongodb_url = os.getenv("MONGODB_URL")
+# os.getenv funciona como preguntar: "¿Hay algo guardado bajo el nombre 'MONGODB_URI'?"
+mongodb_url = os.getenv("MONGODB_URI")
 
 # 3. Crear el Cliente (El Teléfono)
 # AsyncIOMotorClient es el objeto que nos permite "llamar" a la base de datos de manera asíncrona
@@ -30,3 +30,11 @@ database = client[database_name]
 
 # Colección de recompensas blockchain
 rewards_collection = database["rewards"]
+
+# Colección de sesiones de staking (modelo Stake-to-Earn)
+# Aquí se guardan los stakes activos e históricos de los usuarios
+staking_collection = database["staking_sessions"]
+
+# Colección de Extra Lives (moneda mágica anti-penalización)
+# Guarda el historial de usos del sistema Extra Life por usuario
+extra_lives_collection = database["extra_lives"]

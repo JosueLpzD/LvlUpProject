@@ -1,4 +1,5 @@
-const API_URL = "http://localhost:8000";
+// Usa la variable de entorno para conectar con el backend (local o Cloudflare)
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface TimeBlockDTO {
     id?: string;
@@ -100,5 +101,23 @@ export const timeblockService = {
         );
 
         if (!response.ok) throw new Error("Failed to update duration");
+    },
+
+    /**
+     * Obtiene estadísticas de los últimos 7 días para las gráficas de progreso.
+     */
+    async getStats(): Promise<StatsDTO> {
+        const response = await fetch(`${API_URL}/timeblocks/stats`);
+        if (!response.ok) throw new Error("Failed to fetch stats");
+        return response.json();
     }
 };
+
+// Tipo para las estadísticas semanales devueltas por /timeblocks/stats
+export interface StatsDTO {
+    daily: { date: string; total: number; completed: number }[];
+    weekly_total: number;
+    weekly_completed: number;
+    completion_rate: number;
+    current_streak: number;
+}

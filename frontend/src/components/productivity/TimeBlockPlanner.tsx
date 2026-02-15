@@ -756,7 +756,7 @@ export function TimeBlockPlanner() {
             )}
 
             {/* 1. Habit Compact Palette (Sidebar) - Ajustado para responsive */}
-            <div className="w-16 md:w-20 flex flex-col items-center gap-4 bg-[#181a25]/90 backdrop-blur-xl border border-zinc-800 py-6 rounded-3xl shadow-2xl shrink-0 h-[calc(100vh-8rem)] md:h-[85vh] sticky top-24 md:top-4 z-40">
+            <div className="w-16 md:w-20 flex flex-col items-center gap-4 bg-[#181a25]/90 backdrop-blur-xl border border-zinc-800 py-6 rounded-3xl shadow-2xl shrink-0 h-[calc(100vh-8rem)] md:h-[85vh] sticky top-24 md:top-4 z-40 overflow-visible">
                 <div className="mb-2 flex flex-col items-center">
                     <div className="p-2 rounded-full bg-amber-500/10 text-amber-500 mb-2">
                         <Sparkles size={20} />
@@ -764,7 +764,7 @@ export function TimeBlockPlanner() {
                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest rotate-180 md:rotate-0 writing-mode-vertical md:writing-mode-horizontal">Inventario</span>
                 </div>
 
-                <div className="flex flex-col gap-4 w-full px-2 overflow-y-auto no-scrollbar items-center pb-4">
+                <div className="flex flex-col gap-4 w-full px-2 overflow-visible no-scrollbar items-center pb-4">
                     <button
                         onClick={() => setIsAddHabitOpen(true)}
                         className="w-12 h-12 md:w-14 md:h-14 rounded-2xl border-2 border-dashed border-zinc-700 hover:border-amber-500 hover:bg-amber-500/10 flex items-center justify-center transition-all shrink-0 text-zinc-500 hover:text-amber-500"
