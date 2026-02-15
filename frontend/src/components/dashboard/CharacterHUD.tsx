@@ -6,10 +6,13 @@ import { Trophy, Zap, Coins, User } from "lucide-react";
 import { motion } from "framer-motion";
 import { LEVEL_THRESHOLDS } from "@/lib/gamification/types";
 import { useEffect, useState } from "react";
+import { ConnectWallet } from "../web3/ConnectWallet";
+import { useWalletBalance } from "@/hooks/blockchain";
 
 export function CharacterHUD() {
     const { user } = useGameStore();
     const [mounted, setMounted] = useState(false);
+    const walletBalance = useWalletBalance();
 
     useEffect(() => {
         setMounted(true);
@@ -72,15 +75,28 @@ export function CharacterHUD() {
                     {nextLevelData && <div className="text-[10px] text-zinc-600 text-right">Sig.: {nextLevelData.minXP} XP</div>}
                 </div>
 
-                {/* Currency */}
-                <div className="flex items-center gap-3 bg-zinc-900/80 px-4 py-2 rounded-xl border border-white/5 shadow-inner">
-                    <div className="flex flex-col items-end">
+                {/* Currency & Wallet */}
+                <div className="hidden md:flex items-center gap-3 bg-zinc-900/80 px-4 py-2 rounded-xl border border-white/5 shadow-inner">
+                    <div className="flex flex-col items-end border-r border-white/10 pr-3 mr-3">
                         <div className="text-xs text-zinc-500 uppercase font-bold">Oro</div>
                         <div className="text-yellow-400 font-mono font-bold flex items-center gap-1">
                             <Coins size={14} />
                             {user.stats.gold.toLocaleString()}
                         </div>
                     </div>
+
+                    <div className="flex flex-col items-end">
+                        <div className="text-xs text-zinc-500 uppercase font-bold">Wallet</div>
+                        <div className="text-blue-400 font-mono font-bold flex items-center gap-1">
+                            <Zap size={14} className="text-blue-500" /> {/* Using Zap or Wallet icon depending on availability */}
+                            {walletBalance.balance} {walletBalance.symbol}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Wallet Connect */}
+                <div className="border-l border-zinc-800 pl-4 ml-2">
+                    <ConnectWallet />
                 </div>
 
             </div>

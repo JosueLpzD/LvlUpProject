@@ -6,6 +6,7 @@ from routes.config_routes import config_router
 from routes.rewards_routes import rewards_router
 from routes.staking_routes import staking_router
 from routes.extra_life_routes import extra_life_router
+from routes.finance_routes import router as finance_router
 
 app = FastAPI()
 # Configurar CORS - Permite conexiones desde localhost y Cloudflare Tunnel
@@ -26,3 +27,4 @@ app.include_router(config_router)
 app.include_router(rewards_router)
 app.include_router(staking_router)
 app.include_router(extra_life_router)
+app.include_router(finance_router)

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { DevTools } from "@/components/dev/DevTools";
 import { ClickToComponentClient } from "@/components/dev/ClickToComponentClient";
+import { Web3Provider } from "@/providers/Web3Provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,9 +30,11 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased debug-ui`}
       >
-        <ClickToComponentClient />
-        {children}
-        <DevTools />
+        <Web3Provider>
+          <ClickToComponentClient />
+          {children}
+          <DevTools />
+        </Web3Provider>
       </body>
     </html>
   );

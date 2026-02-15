@@ -148,6 +148,64 @@ class BlockchainSigner:
         return recovered_address.lower() == self.signer_address.lower()
 
 
+    
+    def generate_settlement_signature(
+        self,
+        user_address: str,
+        week_id: int,
+        amount_to_return: int,
+        deadline: int,
+        contract_address: str,
+        chain_id: int = 84532
+    ) -> str:
+        """
+        Genera una firma EIP-712 para liquidar compromisos de hábitos.
+        
+        Struct en Solidity:
+        struct Settlement {
+            address user;
+            uint256 weekId;
+            uint256 amountToReturn;
+            uint256 deadline;
+        }
+        """
+        
+        # 1. Definir el Domain Separator
+        domain_data = {
+            "name": "HabitEscrow",
+            "version": "1",
+            "chainId": chain_id,
+            "verifyingContract": Web3.to_checksum_address(contract_address)
+        }
+        
+        # 2. Definir los Tipos (EIP-712)
+        message_types = {
+            "Settlement": [
+                {"name": "user", "type": "address"},
+                {"name": "weekId", "type": "uint256"},
+                {"name": "amountToReturn", "type": "uint256"},
+                {"name": "deadline", "type": "uint256"}
+            ]
+        }
+        
+        # 3. Definir los Datos del Mensaje
+        message_data = {
+            "user": Web3.to_checksum_address(user_address),
+            "weekId": week_id,
+            "amountToReturn": amount_to_return,
+            "deadline": deadline
+        }
+        
+        # 4. Firmar usando sign_typed_data
+        signed_message = self.account.sign_typed_data(
+            domain_data=domain_data,
+            message_types=message_types,
+            message_data=message_data
+        )
+        
+        return signed_message.signature.hex()
+
+
 # Crear instancia global del servicio
 # Se inicializa una sola vez cuando el servidor arranca
 signer_service = BlockchainSigner()

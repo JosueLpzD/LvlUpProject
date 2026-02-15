@@ -9,6 +9,8 @@ import { WeeklyCalendarView } from "@/components/dashboard/WeeklyCalendarView";
 import { ProgressCharts } from "@/components/dashboard/ProgressCharts";
 import { ActiveQuestBoard } from "@/components/dashboard/ActiveQuestBoard";
 import { NaviFairy } from "@/components/ai/NaviFairy";
+import { StakingCard } from "@/components/dashboard/StakingCard";
+import { CommitmentCard } from "@/components/dashboard/CommitmentCard";
 
 export default function Home() {
   return (
@@ -18,6 +20,12 @@ export default function Home() {
 
       {/* Main Scrollable Container */}
       <div className="w-full h-full overflow-y-auto custom-scrollbar p-6 flex flex-col gap-10" data-component="PageContainer">
+
+        {/* 0. Staking Hub (Top Priority) */}
+        <section className="w-full shrink-0 flex flex-col gap-6" data-component="StakingSection">
+          <CommitmentCard />
+          <StakingCard />
+        </section>
 
         {/* 1. TimeBlock Planner (Priority #1) */}
         <section className="w-full flex flex-col gap-4" data-component="TimeBlockSection">
@@ -61,6 +69,8 @@ export default function Home() {
             <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider">Tienda</h3>
             <LootShop />
           </div>
+
+
         </section>
 
       </div>
