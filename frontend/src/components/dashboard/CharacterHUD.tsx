@@ -2,8 +2,9 @@
 
 import { useGameStore } from "@/lib/store/gameStore";
 import { Progress } from "@/components/ui/progress";
-import { Trophy, Zap, Coins, User } from "lucide-react";
+import { Trophy, Zap, Coins, User, TriangleAlert } from "lucide-react";
 import { motion } from "framer-motion";
+import { useAccount, useSwitchChain } from "wagmi";
 import { LEVEL_THRESHOLDS } from "@/lib/gamification/types";
 import { useEffect, useState } from "react";
 import { ConnectWallet } from "../web3/ConnectWallet";
@@ -90,16 +91,42 @@ export function CharacterHUD() {
                         <div className="text-blue-400 font-mono font-bold flex items-center gap-1">
                             <Zap size={14} className="text-blue-500" /> {/* Using Zap or Wallet icon depending on availability */}
                             {walletBalance.balance} {walletBalance.symbol}
+                            <button onClick={() => walletBalance.refetch()} className="ml-1 text-zinc-600 hover:text-white">
+                                ↻
+                            </button>
                         </div>
                     </div>
                 </div>
 
                 {/* Wallet Connect */}
-                <div className="border-l border-zinc-800 pl-4 ml-2">
+                <div className="flex items-center gap-2 border-l border-zinc-800 pl-4 ml-2">
                     <ConnectWallet />
                 </div>
-
             </div>
+
+            {/* Network Status Bar (Visible only if wrong network) */}
+            <NetworkStatus />
+        </div>
+    );
+}
+
+function NetworkStatus() {
+    const { chainId } = useAccount();
+    const { switchChain } = useSwitchChain();
+    const REQUIRED_CHAIN_ID = 84532; // Base Sepolia
+
+    if (!chainId || chainId === REQUIRED_CHAIN_ID) return null;
+
+    return (
+        <div className="absolute top-full left-0 w-full bg-red-500/90 text-white text-xs font-bold py-1 flex justify-center items-center gap-2 backdrop-blur-md">
+            <TriangleAlert size={14} />
+            <span>Estás en una red incorrecta.</span>
+            <button
+                onClick={() => switchChain({ chainId: REQUIRED_CHAIN_ID })}
+                className="underline hover:text-red-200"
+            >
+                Cambiar a Base Sepolia
+            </button>
         </div>
     );
 }

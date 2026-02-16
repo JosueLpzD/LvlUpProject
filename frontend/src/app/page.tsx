@@ -24,7 +24,7 @@ export default function Home() {
         {/* 0. Staking Hub (Top Priority) */}
         <section className="w-full shrink-0 flex flex-col gap-6" data-component="StakingSection">
           <CommitmentCard />
-          <StakingCard />
+          {/* <StakingCard /> */}
         </section>
 
         {/* 1. TimeBlock Planner (Priority #1) */}

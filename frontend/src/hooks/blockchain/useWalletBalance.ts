@@ -9,6 +9,7 @@ export function useWalletBalance() {
 
     const { data, isError, isLoading, refetch } = useBalance({
         address,
+        chainId: 84532, // Force Base Sepolia
     });
 
     const formattedBalance = data ? parseFloat(formatEther(data.value)).toFixed(4) : '0.0000';

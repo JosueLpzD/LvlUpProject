@@ -30,18 +30,18 @@ const wagmiConfig = createConfig({
 
     // Conectores de wallet
     connectors: [
-        // Coinbase Wallet - recomendado para Base
-        coinbaseWallet({
-            appName: 'LvlUp',
-            preference: 'smartWalletOnly', // Usar Smart Wallet por defecto
-        }),
         // Wallets inyectadas (MetaMask, Brave, etc.)
         injected(),
+        // Coinbase Wallet
+        coinbaseWallet({
+            appName: 'LvlUp',
+        }),
     ],
 
     // Transportes HTTP para cada chain
     transports: {
-        [baseSepolia.id]: http(),
+        // Usamos RPC público de Base para evitar errores 401 con claves de prueba
+        [baseSepolia.id]: http("https://sepolia.base.org"),
         [base.id]: http(),
     },
 })

@@ -7,6 +7,9 @@ import { Plus, GripVertical, Clock, Trash2, Sparkles, CheckCircle, XCircle, Sett
 import { timeblockService, TimeBlockDTO } from "@/services/timeblockService";
 import { configService } from "@/services/configService";
 import { emitNaviEvent } from "@/lib/naviEvents";
+import { useHabitEscrow } from "@/hooks/blockchain";
+import { useEthPrice } from "@/hooks/useEthPrice";
+import { Flame, Shield } from "lucide-react";
 
 // Mock Data for "My Habits" Palette
 const INITIAL_HABIT_PALETTE = [
@@ -69,6 +72,18 @@ export function TimeBlockPlanner() {
 
     // Customizable Time Range State (Default 5 AM - 11 PM)
     const [config, setConfig] = useState({ startHour: 5, endHour: 21 }); // 21 is 9 PM, so range ends at 10 PM block
+
+    // --- FINANCIAL RISK LOGIC ---
+    const { depositAmount } = useHabitEscrow();
+    const { price: ethPrice } = useEthPrice();
+    const activeDeposit = parseFloat(depositAmount || '0');
+    const totalDailyHabits = blocks.length;
+    // Riesgo por hábito = (Depósito Total * Precio) / Total Hábitos
+    // Si no hay hábitos, 0. Si no hay depósito, 0.
+    const riskPerHabitUsd = (activeDeposit > 0 && totalDailyHabits > 0)
+        ? (activeDeposit * ethPrice) / totalDailyHabits
+        : 0;
+    // ----------------------------
     const [isConfigOpen, setIsConfigOpen] = useState(false);
 
     // Cargar configuración del servidor al iniciar
@@ -975,12 +990,11 @@ export function TimeBlockPlanner() {
                                                     // Remove custom style override since we use real classes now
                                                     style={{}}
                                                 >
-                                                    {/* Internal Layout for Squared/Compact Blocks */}
-                                                    <div className="flex flex-col md:flex-row items-start gap-2 overflow-hidden w-full h-full p-2">
+                                                    <div className="flex flex-col md:flex-row items-start gap-2 overflow-hidden w-full h-full p-2 relative">
                                                         <div className={cn("w-6 h-6 md:w-8 md:h-8 rounded-md flex items-center justify-center text-sm md:text-lg shadow-inner bg-black/20 shrink-0 relative", habit.color.split(' ')[0])}>
                                                             {block.completed ? <CheckCircle size={14} className="text-emerald-400" /> : habit.emoji}
                                                         </div>
-                                                        <div className="min-w-0 flex-1 leading-none">
+                                                        <div className="min-w-0 flex-1 leading-none z-10">
                                                             <h4 className={cn("font-bold text-white truncate text-xs md:text-sm", block.completed && "line-through text-zinc-400")}>{habit.title}</h4>
                                                             {block.durationMin > 0 && (
                                                                 <span className="text-[9px] font-mono text-zinc-500 opacity-70">
@@ -988,6 +1002,20 @@ export function TimeBlockPlanner() {
                                                                 </span>
                                                             )}
                                                         </div>
+
+                                                        {/* --- RISK BADGE --- */}
+                                                        {riskPerHabitUsd > 0 && (
+                                                            <div className={cn(
+                                                                "absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 shadow-sm backdrop-blur-sm",
+                                                                block.completed
+                                                                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                                                    : "bg-red-500/20 text-red-300 border border-red-500/30 animate-pulse"
+                                                            )}>
+                                                                {block.completed ? <Shield size={8} /> : <Flame size={8} />}
+                                                                ${riskPerHabitUsd.toFixed(2)}
+                                                            </div>
+                                                        )}
+                                                        {/* ------------------ */}
                                                     </div>
 
                                                     {/* Resize / Delete Controls - Internal overlay */}

@@ -43,12 +43,17 @@ export function useHabitEscrow() {
     /**
      * Solicita firma al backend y ejecuta el retiro.
      */
-    const settleAndWithdraw = async () => {
+    const settleAndWithdraw = async (isDebug = false) => {
         if (!address) return;
         setIsSigning(true);
         try {
-            // 1. Pedir firma al backend
-            const response = await fetch('http://localhost:8000/finance/settlement/sign', {
+            // 1. Pedir firma al backend (Endpoint depende de si es Debug o Real)
+            const endpoint = isDebug
+                ? 'http://localhost:8000/finance/debug/settle'
+                : 'http://localhost:8000/finance/settlement/sign';
+
+            console.log(`📡 Fetching signature from: ${endpoint}`);
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -57,17 +62,27 @@ export function useHabitEscrow() {
                 })
             });
 
-            if (!response.ok) throw new Error('Error obteniendo firma del oráculo');
+            console.log(`📡 Response status: ${response.status}`);
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`Error backend (${response.status}): ${errText}`);
+            }
 
             const data = await response.json();
+            console.log("📦 Settlement Data:", data);
 
             // 2. Ejecutar transacción On-Chain
+            // Aseguramos que los valores existan antes de convertir a BigInt
+            if (!data.signature || data.amount_to_return === undefined || !data.deadline) {
+                throw new Error("Respuesta inválida del servidor (faltan campos)");
+            }
+
             writeContract({
                 address: HABIT_ESCROW_ADDRESS,
                 abi: HabitEscrowABI,
                 functionName: 'withdraw',
                 args: [
-                    BigInt(data.weekId),
+                    BigInt(data.week_id || currentWeekId), // week_id a veces viene como week_id o weekId
                     BigInt(data.amount_to_return),
                     BigInt(data.deadline),
                     data.signature as `0x${string}`

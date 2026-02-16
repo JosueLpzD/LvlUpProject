@@ -46,15 +46,6 @@ export function ConnectWallet({ className }: ConnectWalletProps) {
                         <Address />
                     </Identity>
 
-                    {/* Link a explorador de bloques */}
-                    <WalletDropdownLink
-                        icon="wallet"
-                        href="https://sepolia.basescan.org"
-                        target="_blank"
-                    >
-                        View on Explorer
-                    </WalletDropdownLink>
-
                     {/* Botón de desconexión */}
                     <WalletDropdownDisconnect />
                 </WalletDropdown>

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from services.blockchain_signer import signer_service
 from config.database import database
 import os
@@ -10,6 +10,12 @@ from datetime import datetime, timedelta
 router = APIRouter(prefix="/finance", tags=["Finance & Staking"])
 
 # --- Modelos de Request/Response ---
+
+class CommitmentConfig(BaseModel):
+    user_address: str
+    week_id: int
+    mode: str = "HARD"  # "HARD" or "CUSTOM"
+    selected_habit_ids: List[str] = []
 
 class SettlementRequest(BaseModel):
     user_address: str
@@ -38,37 +44,74 @@ def get_week_dates(week_id: int, year: int = 2026):
 async def calculate_payout(user_address: str, week_id: int) -> int:
     """
     Calcula cuánto devolver al usuario basándose en su rendimiento REAL en MongoDB.
-    Regla: Si cumple >= 5 hábitos en la semana, gana. Si no, pierde 10%.
+    
+    MODO HARD: Cuenta TODOS los hábitos completados.
+    MODO CUSTOM: Cuenta SOLO los hábitos seleccionados en la configuración.
     """
     DEPOSIT_AMOUNT = 10**18  # 1 ETH (En prod leeríamos esto del contrato usando Web3)
     
+    # 0. Get Commitment Config
+    config = await database.commitment_configs.find_one({
+        "user_address": user_address,
+        "week_id": week_id
+    })
+    
+    # Default to HARD mode if no config found
+    mode = config["mode"] if config else "HARD"
+    selected_ids = config["selected_habit_ids"] if config else []
+    
+    print(f"🕵️ Payout Logic: Mode={mode}, Selected={len(selected_ids)}")
+
     # 1. Obtener fechas de la semana solicitada
-    # Si week_id es 0 o 1 (default del frontend), usaremos la semana actual para facilitar tests
     current_iso_week = datetime.now().isocalendar()[1]
     target_week = week_id if week_id > 1 else current_iso_week
     week_dates = get_week_dates(target_week, datetime.now().year)
     
-    # 2. Contar hábitos completados en esa semana
-    # Nota: En este prototipo monousuario, no filtramos por user_id en TimeBlocks.
-    # En producción, TimeBlock necesitaría un campo 'user_address'.
-    completed_count = await database.timeblocks.count_documents({
-        "date": {"$in": week_dates},
-        "completed": True
-    })
+    # 2. Construir Query Base
+    query = {
+        "date": {"$in": week_dates}
+    }
     
-    # 3. Aplicar regla de negocio
-    GOAL_PER_WEEK = 5
+    # EN MODO CUSTOM: Filtrar solo los IDs seleccionados
+    if mode == "CUSTOM" and selected_ids:
+        query["habit_id"] = {"$in": selected_ids}
+        
+    total_relevant_blocks = await database.timeblocks.count_documents(query)
     
-    print(f"💰 Payout Debug: Semana {target_week} | Completados: {completed_count}/{GOAL_PER_WEEK}")
+    # 3. Contar hábitos completados (dentro del conjunto relevante)
+    query["completed"] = True
+    completed_count = await database.timeblocks.count_documents(query)
     
-    if completed_count >= GOAL_PER_WEEK:
-        # ¡Éxito! Devuelve 100% + Recompensa (simulada aquí como 0% extra por ahora)
+    # 4. Regla de Negocio
+    # Si no había nada que hacer (total=0), devolvemos todo (no penalty for chilling)
+    if total_relevant_blocks == 0:
+        return int(DEPOSIT_AMOUNT)
+
+    # Calculate rate
+    completion_rate = completed_count / total_relevant_blocks
+    print(f"💰 Payout Debug: Mode {mode} | {completed_count}/{total_relevant_blocks} ({completion_rate:.2%})")
+    
+    if completion_rate >= 0.8: # Umbral del 80% para éxito
         return int(DEPOSIT_AMOUNT * 1.0)
     else:
-        # Fallo: Devuelve solo 90% (Penalización 10%)
+        # Penalización proporcional: Paga lo que fallaste
+        # return int(DEPOSIT_AMOUNT * completion_rate) 
+        
+        # O Regla Dura (fija): -10%
         return int(DEPOSIT_AMOUNT * 0.9)
 
 # --- Endpoints ---
+
+@router.post("/config")
+async def save_commitment_config(config: CommitmentConfig):
+    """Guarda la configuración de riesgos para una semana."""
+    # Upsert (Actualizar si existe, crear si no)
+    await database.commitment_configs.update_one(
+        {"user_address": config.user_address, "week_id": config.week_id},
+        {"$set": config.dict()},
+        upsert=True
+    )
+    return {"message": "Configuración de compromiso guardada", "mode": config.mode}
 
 @router.post("/settlement/sign", response_model=SettlementResponse)
 async def sign_settlement(req: SettlementRequest):
@@ -108,3 +151,12 @@ async def sign_settlement(req: SettlementRequest):
     except Exception as e:
         print(f"Error generando firma de liquidación: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/debug/settle", response_model=SettlementResponse)
+async def debug_force_settle(req: SettlementRequest):
+    """
+    ENDPOINT DE DEBUG: Fuerza la liquidación inmediata.
+    Ignora si la semana ha terminado. Útil para testing.
+    """
+    print(f"🧪 DEBUG: Forzando liquidación para {req.week_id}")
+    return await sign_settlement(req)

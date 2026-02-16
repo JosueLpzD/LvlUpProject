@@ -1,5 +1,6 @@
 """
 Modelo Extra Life 🪙
+https://youtu.be/_zTP0_9hfPQ?si=0NY-v7nGkGFLVGmY
 
 Define la estructura de datos para el sistema "Extra Life" — un mecanismo oculto
 que protege al usuario de perder progreso o recibir penalizaciones.
