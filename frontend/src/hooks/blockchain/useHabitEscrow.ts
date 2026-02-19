@@ -17,7 +17,7 @@ export function useHabitEscrow() {
     // TODO: Calcular weekId dinámicamente
     const currentWeekId = 1;
 
-    const { data: depositAmount, refetch: refetchDeposit } = useReadContract({
+    const { data: depositAmount, refetch: refetchDeposit, isLoading: isReading, error: readError } = useReadContract({
         address: HABIT_ESCROW_ADDRESS,
         abi: HabitEscrowABI,
         functionName: 'deposits',
@@ -58,7 +58,8 @@ export function useHabitEscrow() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     user_address: address,
-                    week_id: currentWeekId
+                    week_id: currentWeekId,
+                    deposit_amount: depositAmount ? depositAmount.toString() : "0"
                 })
             });
 
@@ -101,8 +102,10 @@ export function useHabitEscrow() {
         depositAmount: depositAmount ? formatEther(depositAmount) : '0',
         depositETH,
         settleAndWithdraw,
-        isLoading: isWritePending || isConfirming || isSigning,
+        isLoading: isWritePending || isConfirming || isSigning || isReading,
         isSuccess: isConfirmed,
-        hash
+        hash,
+        refetch: refetchDeposit,
+        readError
     };
 }

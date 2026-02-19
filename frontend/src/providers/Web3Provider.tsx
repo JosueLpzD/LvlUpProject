@@ -11,40 +11,13 @@
 
 import { OnchainKitProvider } from '@coinbase/onchainkit'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { WagmiProvider, createConfig, http } from 'wagmi'
+import { WagmiProvider, type State } from 'wagmi'
 import { baseSepolia, base } from 'wagmi/chains'
-import { coinbaseWallet, injected } from 'wagmi/connectors'
 import { type ReactNode, useState } from 'react'
+import { config } from '@/lib/wagmi'
 
 // Importar estilos de OnchainKit
 import '@coinbase/onchainkit/styles.css'
-
-/**
- * Configuración de Wagmi
- * - Chains: Base Sepolia (testnet) y Base (mainnet)
- * - Connectors: Coinbase Wallet e inyectados (MetaMask, etc.)
- */
-const wagmiConfig = createConfig({
-    // Cadenas soportadas
-    chains: [baseSepolia, base],
-
-    // Conectores de wallet
-    connectors: [
-        // Wallets inyectadas (MetaMask, Brave, etc.)
-        injected(),
-        // Coinbase Wallet
-        coinbaseWallet({
-            appName: 'LvlUp',
-        }),
-    ],
-
-    // Transportes HTTP para cada chain
-    transports: {
-        // Usamos RPC público de Base para evitar errores 401 con claves de prueba
-        [baseSepolia.id]: http("https://sepolia.base.org"),
-        [base.id]: http(),
-    },
-})
 
 // Seleccionar chain basado en variable de entorno
 // 84532 = Base Sepolia (testnet), 8453 = Base (mainnet)
@@ -54,9 +27,10 @@ const activeChain = process.env.NEXT_PUBLIC_CHAIN_ID === '8453'
 
 interface Web3ProviderProps {
     children: ReactNode
+    initialState?: State
 }
 
-export function Web3Provider({ children }: Web3ProviderProps) {
+export function Web3Provider({ children, initialState }: Web3ProviderProps) {
     // QueryClient para react-query (cache de datos blockchain)
     const [queryClient] = useState(() => new QueryClient({
         defaultOptions: {
@@ -70,7 +44,7 @@ export function Web3Provider({ children }: Web3ProviderProps) {
     }))
 
     return (
-        <WagmiProvider config={wagmiConfig}>
+        <WagmiProvider config={config} initialState={initialState}>
             <QueryClientProvider client={queryClient}>
                 <OnchainKitProvider
                     apiKey={process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY}

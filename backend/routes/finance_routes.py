@@ -21,6 +21,7 @@ class SettlementRequest(BaseModel):
     user_address: str
     week_id: int
     chain_id: Optional[int] = 84532  # Base Sepolia por defecto
+    deposit_amount: Optional[str] = "0"  # Recibir como string para evitar overflow
 
 class SettlementResponse(BaseModel):
     signature: str
@@ -41,14 +42,18 @@ def get_week_dates(week_id: int, year: int = 2026):
         dates.append(day.strftime("%Y-%m-%d"))
     return dates
 
-async def calculate_payout(user_address: str, week_id: int) -> int:
+async def calculate_payout(user_address: str, week_id: int, deposit_amount_wei: int) -> int:
     """
     Calcula cuánto devolver al usuario basándose en su rendimiento REAL en MongoDB.
     
     MODO HARD: Cuenta TODOS los hábitos completados.
     MODO CUSTOM: Cuenta SOLO los hábitos seleccionados en la configuración.
     """
-    DEPOSIT_AMOUNT = 10**18  # 1 ETH (En prod leeríamos esto del contrato usando Web3)
+    # Usar el monto real depositado (o fallback a 0 si nada, aunque el contrato fallará si es 0)
+    DEPOSIT_AMOUNT = deposit_amount_wei
+    
+    if DEPOSIT_AMOUNT == 0:
+        return 0
     
     # 0. Get Commitment Config
     config = await database.commitment_configs.find_one({
@@ -92,13 +97,12 @@ async def calculate_payout(user_address: str, week_id: int) -> int:
     print(f"💰 Payout Debug: Mode {mode} | {completed_count}/{total_relevant_blocks} ({completion_rate:.2%})")
     
     if completion_rate >= 0.8: # Umbral del 80% para éxito
-        return int(DEPOSIT_AMOUNT * 1.0)
+        # Retorno completo (Integer Math)
+        return DEPOSIT_AMOUNT
     else:
         # Penalización proporcional: Paga lo que fallaste
-        # return int(DEPOSIT_AMOUNT * completion_rate) 
-        
-        # O Regla Dura (fija): -10%
-        return int(DEPOSIT_AMOUNT * 0.9)
+        # Regla Dura (fija): -10% -> (Amount * 9) // 10
+        return (DEPOSIT_AMOUNT * 9) // 10
 
 # --- Endpoints ---
 
@@ -120,17 +124,32 @@ async def sign_settlement(req: SettlementRequest):
     del contrato HabitEscrow.
     """
     try:
-        # 1. Validar lógica de negocio (Off-Chain)
-        amount_to_return = await calculate_payout(req.user_address, req.week_id)
-        
-        # 2. Configurar parámetros de seguridad
-        deadline = int(time.time()) + 3600  # Firma válida por 1 hora
+        # 1. Validaciones Iniciales & Setup
         contract_address = os.getenv("HABIT_ESCROW_ADDRESS")
-        
         if not contract_address:
             raise HTTPException(status_code=500, detail="Contract address not configured in backend")
+
+        # --- WEI PROTOCOL: VALIDATION ---
+        # Rechazar explícitamente cualquier cosa que parezca un decimal
+        if req.deposit_amount and any(c in req.deposit_amount for c in ['.', ',']):
+             raise HTTPException(
+                status_code=400, 
+                detail="Invalid format. Protocol requires atomic units (Wei/Satoshi) as integer strings. No decimals allowed."
+            )
+
+        # Convertir con seguridad
+        try:
+            deposit_amount = int(req.deposit_amount) if req.deposit_amount else 0
+        except ValueError:
+             raise HTTPException(status_code=400, detail="Invalid integer amount. Send Wei as string.")
+
+        # 2. Validar lógica de negocio (Off-Chain)
+        amount_to_return = await calculate_payout(req.user_address, req.week_id, deposit_amount)
+        
+        # 3. Configurar parámetros de seguridad
+        deadline = int(time.time()) + 3600  # Firma válida por 1 hora
             
-        # 3. Generar Firma
+        # 4. Generar Firma
         signature = signer_service.generate_settlement_signature(
             user_address=req.user_address,
             week_id=req.week_id,
@@ -148,6 +167,8 @@ async def sign_settlement(req: SettlementRequest):
             "week_id": req.week_id
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error generando firma de liquidación: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -158,5 +179,5 @@ async def debug_force_settle(req: SettlementRequest):
     ENDPOINT DE DEBUG: Fuerza la liquidación inmediata.
     Ignora si la semana ha terminado. Útil para testing.
     """
-    print(f"🧪 DEBUG: Forzando liquidación para {req.week_id}")
+    print(f"🧪 DEBUG: Forzando liquidación para {req.week_id} con deposito {req.deposit_amount}")
     return await sign_settlement(req)

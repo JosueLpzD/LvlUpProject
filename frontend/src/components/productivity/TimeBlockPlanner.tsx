@@ -898,6 +898,21 @@ export function TimeBlockPlanner() {
                     </button>
                 </div>
 
+                {/* FINANCIAL RISK HEADER SUMMARY */}
+                {riskPerHabitUsd > 0 && (
+                    <div className="w-full bg-red-500/5 border-b border-red-500/10 px-8 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs text-red-300/80">
+                            <Flame size={12} className="animate-pulse" />
+                            <span>
+                                <b>Modo Hard:</b> Cada bloque vale <span className="text-white font-mono">${riskPerHabitUsd.toFixed(2)}</span>
+                            </span>
+                        </div>
+                        <div className="text-[10px] text-zinc-500">
+                            Total en juego: <span className="text-zinc-300">${(activeDeposit * ethPrice).toFixed(2)}</span>
+                        </div>
+                    </div>
+                )}
+
                 {/* Scrollable Timeline */}
                 <div className="relative overflow-x-hidden p-0">
                     {HOURS.map(hour => {
@@ -991,27 +1006,55 @@ export function TimeBlockPlanner() {
                                                     style={{}}
                                                 >
                                                     <div className="flex flex-col md:flex-row items-start gap-2 overflow-hidden w-full h-full p-2 relative">
-                                                        <div className={cn("w-6 h-6 md:w-8 md:h-8 rounded-md flex items-center justify-center text-sm md:text-lg shadow-inner bg-black/20 shrink-0 relative", habit.color.split(' ')[0])}>
+                                                        {/* --- Visual Backgrounds (Graphs/Patterns) --- */}
+                                                        <div className="absolute inset-0 z-0 opacity-10 pointer-events-none">
+                                                            {/* Tech Pattern */}
+                                                            <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                                                                <pattern id={`grid-${block.id}`} width="10" height="10" patternUnits="userSpaceOnUse">
+                                                                    <path d="M 10 0 L 0 0 0 10" fill="none" stroke="currentColor" strokeWidth="0.5" />
+                                                                </pattern>
+                                                                <rect width="100%" height="100%" fill={`url(#grid-${block.id})`} />
+
+                                                                {/* Mini Sparkline at bottom */}
+                                                                <path
+                                                                    d={`M0 ${50 + Math.random() * 20} Q ${20 + Math.random() * 10} ${20 + Math.random() * 20}, ${40 + Math.random() * 10} ${50 + Math.random() * 20} T 100 50`}
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    strokeWidth="2"
+                                                                    className="text-white opacity-20"
+                                                                    vectorEffect="non-scaling-stroke"
+                                                                />
+                                                            </svg>
+                                                        </div>
+
+                                                        {/* --- Contract Identifier --- */}
+                                                        <div className="absolute top-1 right-1 z-0 text-[8px] font-mono text-zinc-500/50 select-none">
+                                                            #{block.id.slice(0, 4).toUpperCase()}:{habit.title.slice(0, 2).toUpperCase()}
+                                                        </div>
+
+                                                        <div className={cn("w-6 h-6 md:w-8 md:h-8 rounded-md flex items-center justify-center text-sm md:text-lg shadow-inner bg-black/20 shrink-0 relative z-10", habit.color.split(' ')[0])}>
                                                             {block.completed ? <CheckCircle size={14} className="text-emerald-400" /> : habit.emoji}
                                                         </div>
                                                         <div className="min-w-0 flex-1 leading-none z-10">
                                                             <h4 className={cn("font-bold text-white truncate text-xs md:text-sm", block.completed && "line-through text-zinc-400")}>{habit.title}</h4>
                                                             {block.durationMin > 0 && (
                                                                 <span className="text-[9px] font-mono text-zinc-500 opacity-70">
-                                                                    {block.durationMin}m
+                                                                    {block.durationMin}m • <span className="text-[8px]">CONTRACT-{block.id.slice(-4)}</span>
                                                                 </span>
                                                             )}
                                                         </div>
 
                                                         {/* --- RISK BADGE --- */}
                                                         {riskPerHabitUsd > 0 && (
-                                                            <div className={cn(
-                                                                "absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 shadow-sm backdrop-blur-sm",
-                                                                block.completed
-                                                                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                                                                    : "bg-red-500/20 text-red-300 border border-red-500/30 animate-pulse"
-                                                            )}>
-                                                                {block.completed ? <Shield size={8} /> : <Flame size={8} />}
+                                                            <div
+                                                                title={block.completed ? "Ganado" : `Si fallas, pierdes $${riskPerHabitUsd.toFixed(2)}`}
+                                                                className={cn(
+                                                                    "absolute bottom-1 right-1 px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 shadow-sm backdrop-blur-sm transition-all hover:scale-110 cursor-help z-20",
+                                                                    block.completed
+                                                                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                                                        : "bg-red-500/40 text-white border border-red-500/50 animate-pulse"
+                                                                )}>
+                                                                {block.completed ? <Shield size={10} /> : <Flame size={10} />}
                                                                 ${riskPerHabitUsd.toFixed(2)}
                                                             </div>
                                                         )}
@@ -1038,9 +1081,6 @@ export function TimeBlockPlanner() {
                             </div>
                         )
                     })}
-
-
-
                 </div>
             </div>
 
