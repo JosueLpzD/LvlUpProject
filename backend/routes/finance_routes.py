@@ -16,6 +16,17 @@ class CommitmentConfig(BaseModel):
     week_id: int
     mode: str = "HARD"  # "HARD" or "CUSTOM"
     selected_habit_ids: List[str] = []
+    tx_hash: Optional[str] = None
+    deposit_amount: Optional[str] = None
+    status: str = "ACTIVE" # "ACTIVE" or "SETTLED"
+    settlement_tx_hash: Optional[str] = None
+    amount_returned: Optional[str] = None
+
+class SettlementConfirmRequest(BaseModel):
+    user_address: str
+    week_id: int
+    tx_hash: str
+    amount_returned: str
 
 class SettlementRequest(BaseModel):
     user_address: str
@@ -110,12 +121,32 @@ async def calculate_payout(user_address: str, week_id: int, deposit_amount_wei: 
 async def save_commitment_config(config: CommitmentConfig):
     """Guarda la configuración de riesgos para una semana."""
     # Upsert (Actualizar si existe, crear si no)
+    update_data = config.dict(exclude_unset=True)
+    
     await database.commitment_configs.update_one(
         {"user_address": config.user_address, "week_id": config.week_id},
-        {"$set": config.dict()},
+        {"$set": update_data},
         upsert=True
     )
     return {"message": "Configuración de compromiso guardada", "mode": config.mode}
+
+@router.get("/config/{user_address}/{week_id}")
+async def get_commitment_config(user_address: str, week_id: int):
+    """Obtiene la configuración activa para una semana."""
+    config = await database.commitment_configs.find_one({
+        "user_address": user_address,
+        "week_id": week_id
+    })
+    
+    if not config:
+        return {"active": False, "mode": "NONE", "selected_habit_ids": []}
+        
+    # Convert ObjectId to string if present (though pydantic usually handles response, manual dict helps here)
+    config.pop("_id", None)
+    return {
+        "active": True, 
+        **config
+    }
 
 @router.post("/settlement/sign", response_model=SettlementResponse)
 async def sign_settlement(req: SettlementRequest):
@@ -181,3 +212,18 @@ async def debug_force_settle(req: SettlementRequest):
     """
     print(f"🧪 DEBUG: Forzando liquidación para {req.week_id} con deposito {req.deposit_amount}")
     return await sign_settlement(req)
+
+@router.post("/settlement/confirm")
+async def confirm_settlement(req: SettlementConfirmRequest):
+    """Marca un contrato como liquidado en la base de datos tras confirmar transacción en blockchain."""
+    result = await database.commitment_configs.update_one(
+        {"user_address": req.user_address, "week_id": req.week_id},
+        {"$set": {
+            "status": "SETTLED",
+            "settlement_tx_hash": req.tx_hash,
+            "amount_returned": req.amount_returned
+        }}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Configuración no encontrada")
+    return {"message": "Liquidación confirmada exitosamente"}

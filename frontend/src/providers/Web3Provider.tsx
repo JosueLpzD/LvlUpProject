@@ -47,7 +47,7 @@ export function Web3Provider({ children, initialState }: Web3ProviderProps) {
         <WagmiProvider config={config} initialState={initialState}>
             <QueryClientProvider client={queryClient}>
                 <OnchainKitProvider
-                    apiKey={process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY}
+                    // apiKey={process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY}
                     chain={activeChain}
                 >
                     {children}

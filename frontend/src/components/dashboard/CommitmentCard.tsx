@@ -10,18 +10,30 @@ import { CommitmentConfigModal } from './CommitmentConfigModal';
 import { RiskAreaChart } from './RiskAreaChart';
 import { timeblockService } from '@/services/timeblockService';
 
-export function CommitmentCard() {
-    const { isConnected, chainId } = useAccount();
-    const { switchChain } = useSwitchChain();
-    const { depositETH, settleAndWithdraw, depositAmount, isLoading, isSuccess, hash, refetch, readError } = useHabitEscrow();
+import { useGameStore } from "@/lib/store/gameStore"; // Added import
 
-    // Auto-update UI after successful transaction (No Time Limit Mode)
+export function CommitmentCard() {
+    const { isConnected, chainId, address } = useAccount(); // Added address
+    const { switchChain } = useSwitchChain();
+
+    // Initialize from localStorage if available, else 1
+    const [testWeekId, setTestWeekId] = useState(1);
+
     useEffect(() => {
-        if (isSuccess && refetch) {
-            refetch();
-            // Optional: User feedback handled by toast or let diagram update
-        }
-    }, [isSuccess, refetch]);
+        const saved = localStorage.getItem('lvlup_test_week_id');
+        if (saved) setTestWeekId(parseInt(saved));
+    }, []);
+
+    // Save to localStorage whenever it changes
+    useEffect(() => {
+        localStorage.setItem('lvlup_test_week_id', testWeekId.toString());
+        // Dispatch event for other components to listen (simple bus)
+        window.dispatchEvent(new Event('weekIdChanged'));
+    }, [testWeekId]);
+
+    // Custom Hook with dynamic weekId
+    const { depositETH, settleAndWithdraw, depositAmount, isLoading, isSuccess, hash, refetch, readError, actionType, settlementAmount } = useHabitEscrow(testWeekId);
+
     const { price: ethPrice } = useEthPrice();
     const [amount, setAmount] = useState('');
 
@@ -39,32 +51,75 @@ export function CommitmentCard() {
 
     // --- New State for Config Modes ---
     const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-    const [habits, setHabits] = useState<any[]>([]); // We need to fetch habits
+
+    // Use Game Store Habits instead of Timeblocks for consistency
+    const { habits: storeHabits } = useGameStore();
+    const [habits, setHabits] = useState<any[]>([]);
     const [stats, setStats] = useState({ completed: 0, total: 0 }); // For Risk Chart
     const [mode, setMode] = useState<'HARD' | 'CUSTOM'>('HARD');
+    const [selectedHabitIds, setSelectedHabitIds] = useState<string[]>([]);
+    const [pendingAmount, setPendingAmount] = useState<string>('');
 
-    // Load Habits for the Modal
+    // Load Habits for the Modal (synced with Store)
     useEffect(() => {
-        const fetchHabits = async () => {
-            // En un app real, esto vendría de un servicio de hábitos global.
-            // Por simplicidad, leeremos los timeblocks de HOY para extraer los hábitos únicos.
-            const today = new Date().toISOString().split('T')[0];
-            const blocks = await timeblockService.getByDate(today);
+        // Map store habits to modal format
+        const mappedHabits = storeHabits.map(h => ({
+            id: h.id,
+            title: h.title,
+            emoji: '🎯' // Default emoji since store habit might not have it yet, or use generic
+        }));
+        setHabits(mappedHabits);
 
-            // Extraer hábitos únicos de los bloques
-            const uniqueHabits = Array.from(new Set(blocks.map(b => b.habit_id)))
-                .map(id => {
-                    const block = blocks.find(b => b.habit_id === id);
-                    return { id, title: block?.title || 'Hábito', emoji: '🎯' }; // Emoji y título vendrían del block
-                });
-            setHabits(uniqueHabits);
+        // Stats can stay dummy or be calculated if needed, for risk chart visualization
+        // For now, let's just use Habit count
+        setStats({ completed: 0, total: storeHabits.length });
+    }, [storeHabits]);
 
-            // Calcular stats simples para la demo
-            const completed = blocks.filter(b => b.completed).length;
-            setStats({ completed, total: blocks.length });
-        };
-        fetchHabits();
-    }, []);
+    // Auto-update UI & Backend after successful transaction
+    useEffect(() => {
+        if (isSuccess && hash && address && actionType !== 'IDLE') {
+            // 1. Refetch Contract Data
+            refetch && refetch();
+
+            // 2. Update Backend with TX Hash & Amount depending on action
+            const updateBackend = async () => {
+                try {
+                    if (actionType === 'DEPOSIT') {
+                        console.log("📝 Updating Backend with DEPOSIT Hash:", hash);
+                        await fetch('http://localhost:8000/finance/config', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                user_address: address, // Real address
+                                week_id: testWeekId,
+                                tx_hash: hash,
+                                deposit_amount: pendingAmount || amount,
+                                mode: mode,
+                                selected_habit_ids: selectedHabitIds
+                            })
+                        });
+                    } else if (actionType === 'SETTLE') {
+                        console.log("🏆 Updating Backend with SETTLEMENT Hash:", hash);
+                        await fetch('http://localhost:8000/finance/settlement/confirm', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                user_address: address, // Real address
+                                week_id: testWeekId,
+                                tx_hash: hash,
+                                amount_returned: settlementAmount
+                            })
+                        });
+                    }
+                    // Force refresh of habits board
+                    window.dispatchEvent(new Event('weekConfigUpdated'));
+                } catch (e) {
+                    console.error("Failed to update backend with TX hash:", e);
+                }
+            };
+            updateBackend();
+        }
+    }, [isSuccess, hash, refetch, testWeekId, isConnected, pendingAmount, amount, address, actionType, settlementAmount]);
 
     const handleOpenConfig = () => {
         if (!amount) return;
@@ -72,8 +127,15 @@ export function CommitmentCard() {
     };
 
     const handleConfirmConfig = async (selectedMode: 'HARD' | 'CUSTOM', selectedIds: string[]) => {
+        if (!address) {
+            alert("Conecta tu wallet primero.");
+            return;
+        }
+
         setIsConfigModalOpen(false);
         setMode(selectedMode);
+        setSelectedHabitIds(selectedIds);
+        setPendingAmount(amount); // Capture amount before clearing or depositing
 
         // 1. Guardar Config en Backend
         try {
@@ -81,8 +143,8 @@ export function CommitmentCard() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    user_address: isConnected ? "0x123...mock" : "", // TODO: Get real address
-                    week_id: 1, // Start week
+                    user_address: address, // Real address
+                    week_id: testWeekId,
                     mode: selectedMode,
                     selected_habit_ids: selectedIds
                 })
@@ -247,36 +309,6 @@ export function CommitmentCard() {
                                             ¡Semana finalizada! Puedes liquidar.
                                         </div>
                                     )}
-
-                                    {/* Debug Controls */}
-                                    <div className="mt-6 flex flex-col gap-2 border-t border-zinc-800 pt-4">
-                                        <div className="text-[10px] font-bold uppercase text-zinc-600">🛠️ Zona de Pruebas</div>
-
-                                        <button
-                                            onClick={() => setIsSettlementTime(!isSettlementTime)}
-                                            className="text-[10px] text-zinc-500 hover:text-white transition-colors"
-                                        >
-                                            {isSettlementTime ? '⏹️ Detener Simulación' : '▶️ Simular Fin de Semana (UI)'}
-                                        </button>
-
-                                        <button
-                                            onClick={async () => {
-                                                if (!confirm("⚠️ ¿Forzar liquidación ahora?")) return;
-                                                console.log("🧪 Debug: Iniciando liquidación forzada...");
-                                                try {
-                                                    await settleAndWithdraw(true);
-                                                    console.log("🧪 Debug: Liquidación solicitada con éxito.");
-                                                } catch (e) {
-                                                    console.error("🧪 Debug Error:", e);
-                                                    alert("Error en liquidación: " + e);
-                                                }
-                                            }}
-                                            disabled={isLoading}
-                                            className="text-[10px] text-red-900 hover:text-red-500 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
-                                        >
-                                            {isLoading ? <Loader2 size={10} className="animate-spin" /> : '⚡ Liquidación Inmediata (DEV - No Time Rules)'}
-                                        </button>
-                                    </div>
                                 </div>
                             </div>
                         )}
@@ -362,6 +394,64 @@ export function CommitmentCard() {
                                 </>
                             )}
                         </button>
+                    </div>
+
+                    {/* Debug Controls - Always Visible */}
+                    <div className="mt-2 flex flex-col gap-2 border-t border-zinc-800 pt-4 relative">
+                        {/* Security Warning Badge */}
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-yellow-500/20 text-yellow-500 text-[9px] font-bold px-2 py-0.5 rounded border border-yellow-500/30">
+                            DEV MODE - NO EN PRODUCCIÓN
+                        </div>
+
+                        <div className="flex justify-between items-center mt-2">
+                            <div className="text-[10px] font-bold uppercase text-zinc-600">🛠️ Zona de Pruebas</div>
+
+                            {/* Test Cycle Controls */}
+                            <div className="flex items-center gap-2 bg-zinc-900 rounded-lg p-1 border border-zinc-800">
+                                <button
+                                    onClick={() => setTestWeekId(prev => Math.max(1, prev - 1))}
+                                    className="px-2 py-0.5 text-xs text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
+                                >
+                                    ◀
+                                </button>
+                                <span className="text-xs font-mono font-bold text-blue-400 min-w-[60px] text-center">
+                                    Week {testWeekId}
+                                </span>
+                                <button
+                                    onClick={() => setTestWeekId(prev => prev + 1)}
+                                    className="px-2 py-0.5 text-xs text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors"
+                                >
+                                    ▶
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                onClick={() => setIsSettlementTime(!isSettlementTime)}
+                                className="text-[10px] text-zinc-500 hover:text-white transition-colors border border-zinc-800 rounded p-1"
+                            >
+                                {isSettlementTime ? '⏹️ Detener Sim.' : '▶️ Simular Fin'}
+                            </button>
+
+                            <button
+                                onClick={async () => {
+                                    if (!confirm("⚠️ ¿Forzar liquidación ahora?")) return;
+                                    console.log("🧪 Debug: Iniciando liquidación forzada...");
+                                    try {
+                                        await settleAndWithdraw(true);
+                                        console.log("🧪 Debug: Liquidación solicitada con éxito.");
+                                    } catch (e) {
+                                        console.error("🧪 Debug Error:", e);
+                                        alert("Error en liquidación: " + e);
+                                    }
+                                }}
+                                disabled={isLoading}
+                                className="text-[10px] text-red-900 hover:text-red-500 transition-colors border border-red-900/30 rounded p-1 flex items-center justify-center gap-1 disabled:opacity-50"
+                            >
+                                {isLoading ? <Loader2 size={10} className="animate-spin" /> : '⚡ Liquidar YA'}
+                            </button>
+                        </div>
                     </div>
 
                     {hash && (

@@ -16,7 +16,11 @@ export const config = createConfig({
         }),
     ],
     transports: {
-        [baseSepolia.id]: http("https://sepolia.base.org"),
+        [baseSepolia.id]: http(
+            process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
+                ? `https://base-sepolia.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY}`
+                : "https://sepolia.base.org"
+        ),
         [base.id]: http(),
     },
 })

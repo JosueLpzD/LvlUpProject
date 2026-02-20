@@ -57,7 +57,7 @@ export function RiskAreaChart({ depositAmount, ethPrice, completed, total, isHar
                     <Tooltip
                         contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }}
                         itemStyle={{ color: '#fff' }}
-                        formatter={(value: number) => [`$${value.toFixed(2)}`, 'Valor']}
+                        formatter={(value: any) => [`$${Number(value).toFixed(2)}`, 'Valor']}
                     />
                     <Area
                         type="monotone"

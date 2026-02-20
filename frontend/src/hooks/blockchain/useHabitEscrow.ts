@@ -1,21 +1,40 @@
 import { useReadContract, useWriteContract, useAccount, useWaitForTransactionReceipt } from 'wagmi';
 import { HABIT_ESCROW_ADDRESS, HabitEscrowABI } from '@/lib/contracts';
 import { parseEther, formatEther } from 'viem';
+
+const WITHDRAW_ABI = [
+    {
+        type: "function",
+        name: "withdraw",
+        inputs: [
+            { name: "weekId", type: "uint256" },
+            { name: "amountToReturn", type: "uint256" },
+            { name: "deadline", type: "uint256" },
+            { name: "signature", type: "bytes" },
+        ],
+        outputs: [],
+        stateMutability: "nonpayable",
+    },
+] as const;
 import { useState } from 'react';
 
 /**
  * Hook para interactuar con HabitEscrow (Commitment Contracts).
  */
-export function useHabitEscrow() {
+/**
+ * Hook para interactuar con HabitEscrow (Commitment Contracts).
+ */
+export function useHabitEscrow(weekId: number = 1) {
     const { address } = useAccount();
-    const { writeContract, data: hash, isPending: isWritePending, error: writeError } = useWriteContract();
+    const { writeContractAsync, data: hash, isPending: isWritePending, error: writeError } = useWriteContract();
     const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
 
     const [isSigning, setIsSigning] = useState(false);
+    const [actionType, setActionType] = useState<'IDLE' | 'DEPOSIT' | 'SETTLE'>('IDLE');
+    const [settlementAmount, setSettlementAmount] = useState<string>('0');
 
-    // Leer depósito activo para la semana actual (Mock weekId=1 por ahora)
-    // TODO: Calcular weekId dinámicamente
-    const currentWeekId = 1;
+    // Using the dynamic weekId passed as argument
+    const currentWeekId = weekId;
 
     const { data: depositAmount, refetch: refetchDeposit, isLoading: isReading, error: readError } = useReadContract({
         address: HABIT_ESCROW_ADDRESS,
@@ -30,14 +49,20 @@ export function useHabitEscrow() {
     /**
      * Deposita ETH en el contrato.
      */
-    const depositETH = (amount: string) => {
-        writeContract({
-            address: HABIT_ESCROW_ADDRESS,
-            abi: HabitEscrowABI,
-            functionName: 'deposit',
-            args: [BigInt(currentWeekId)],
-            value: parseEther(amount)
-        });
+    const depositETH = async (amount: string) => {
+        try {
+            setActionType('DEPOSIT');
+            await writeContractAsync({
+                address: HABIT_ESCROW_ADDRESS,
+                abi: HabitEscrowABI,
+                functionName: 'deposit',
+                args: [BigInt(currentWeekId)],
+                value: parseEther(amount)
+            });
+        } catch (e) {
+            console.error("Deposit Error:", e);
+            setActionType('IDLE');
+        }
     };
 
     /**
@@ -78,21 +103,27 @@ export function useHabitEscrow() {
                 throw new Error("Respuesta inválida del servidor (faltan campos)");
             }
 
-            writeContract({
+            setActionType('SETTLE');
+            setSettlementAmount(data.amount_to_return.toString());
+
+            console.log("📝 Requesting wallet signature locally...");
+            await writeContractAsync({
                 address: HABIT_ESCROW_ADDRESS,
-                abi: HabitEscrowABI,
+                abi: WITHDRAW_ABI,
                 functionName: 'withdraw',
                 args: [
-                    BigInt(data.week_id || currentWeekId), // week_id a veces viene como week_id o weekId
+                    BigInt(data.week_id || currentWeekId),
                     BigInt(data.amount_to_return),
                     BigInt(data.deadline),
-                    data.signature as `0x${string}`
+                    (data.signature.startsWith('0x') ? data.signature : `0x${data.signature}`) as `0x${string}`
                 ]
             });
+            console.log("✅ Transaction submitted!");
 
         } catch (error) {
             console.error(error);
             alert("Error al procesar liquidación: " + error);
+            setActionType('IDLE');
         } finally {
             setIsSigning(false);
         }
@@ -106,6 +137,8 @@ export function useHabitEscrow() {
         isSuccess: isConfirmed,
         hash,
         refetch: refetchDeposit,
-        readError
+        readError,
+        actionType,
+        settlementAmount
     };
 }

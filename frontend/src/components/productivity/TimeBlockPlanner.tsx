@@ -1,15 +1,13 @@
-"use client";
-
 import React, { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import { Plus, GripVertical, Clock, Trash2, Sparkles, CheckCircle, XCircle, Settings, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, GripVertical, Clock, Trash2, Sparkles, CheckCircle, XCircle, Settings, ChevronLeft, ChevronRight, Flame, Shield, ShieldCheck } from "lucide-react";
 import { timeblockService, TimeBlockDTO } from "@/services/timeblockService";
 import { configService } from "@/services/configService";
 import { emitNaviEvent } from "@/lib/naviEvents";
 import { useHabitEscrow } from "@/hooks/blockchain";
 import { useEthPrice } from "@/hooks/useEthPrice";
-import { Flame, Shield } from "lucide-react";
+import { useAccount } from 'wagmi';
 
 // Mock Data for "My Habits" Palette
 const INITIAL_HABIT_PALETTE = [
@@ -36,6 +34,38 @@ export function TimeBlockPlanner() {
     const [blocks, setBlocks] = useState<TimeBlock[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState(new Date());
+
+    // --- Contract Config Logic ---
+    const { address } = useAccount();
+    const [weeklyConfig, setWeeklyConfig] = useState<any>(null);
+    const [testWeekId, setTestWeekId] = useState(1);
+
+    const fetchConfig = async () => {
+        const savedWeek = localStorage.getItem('lvlup_test_week_id');
+        const week = savedWeek ? parseInt(savedWeek) : 1;
+        setTestWeekId(week);
+
+        if (address) {
+            try {
+                const res = await fetch(`http://localhost:8000/finance/config/${address}/${week}`);
+                const data = await res.json();
+                setWeeklyConfig(data);
+            } catch (e) {
+                console.error("Failed to fetch weekly config", e);
+            }
+        }
+    };
+
+    useEffect(() => {
+        fetchConfig();
+        const handleUpdate = () => fetchConfig();
+        window.addEventListener('weekIdChanged', handleUpdate);
+        window.addEventListener('weekConfigUpdated', handleUpdate);
+        return () => {
+            window.removeEventListener('weekIdChanged', handleUpdate);
+            window.removeEventListener('weekConfigUpdated', handleUpdate);
+        };
+    }, [address]);
 
     // 1. Load from API on Mount
     useEffect(() => {
@@ -73,15 +103,19 @@ export function TimeBlockPlanner() {
     // Customizable Time Range State (Default 5 AM - 11 PM)
     const [config, setConfig] = useState({ startHour: 5, endHour: 21 }); // 21 is 9 PM, so range ends at 10 PM block
 
-    // --- FINANCIAL RISK LOGIC ---
-    const { depositAmount } = useHabitEscrow();
+    // --- REAL FINANCIAL RISK LOGIC (Backend Config) ---
     const { price: ethPrice } = useEthPrice();
-    const activeDeposit = parseFloat(depositAmount || '0');
-    const totalDailyHabits = blocks.length;
-    // Riesgo por hábito = (Depósito Total * Precio) / Total Hábitos
-    // Si no hay hábitos, 0. Si no hay depósito, 0.
-    const riskPerHabitUsd = (activeDeposit > 0 && totalDailyHabits > 0)
-        ? (activeDeposit * ethPrice) / totalDailyHabits
+    const isConfigActive = weeklyConfig?.active;
+    const confirmedDepositEth = parseFloat(weeklyConfig?.deposit_amount || '0');
+    const protectedHabitIds = weeklyConfig?.selected_habit_ids || [];
+    const isHardMode = weeklyConfig?.mode === 'HARD';
+
+    // Find how many current daily blocks belong to a protected habit (or ALL if HARD mode)
+    const protectedBlocks = blocks.filter(b => isHardMode || protectedHabitIds.includes(b.habitId));
+
+    // If the contract is active, risk per block is the pool divided by protected blocks
+    const riskPerBlockUsd = (isConfigActive && confirmedDepositEth > 0 && protectedBlocks.length > 0)
+        ? (confirmedDepositEth * ethPrice) / protectedBlocks.length
         : 0;
     // ----------------------------
     const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -899,16 +933,51 @@ export function TimeBlockPlanner() {
                 </div>
 
                 {/* FINANCIAL RISK HEADER SUMMARY */}
-                {riskPerHabitUsd > 0 && (
-                    <div className="w-full bg-red-500/5 border-b border-red-500/10 px-8 py-2 flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-xs text-red-300/80">
-                            <Flame size={12} className="animate-pulse" />
+                {/* FINANCIAL RISK HEADER SUMMARY */}
+                {isConfigActive && confirmedDepositEth > 0 && weeklyConfig?.status !== 'SETTLED' && (
+                    <div className="w-full bg-blue-500/5 border-b border-blue-500/10 px-8 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs text-blue-300">
+                            <ShieldCheck size={12} />
                             <span>
-                                <b>Modo Hard:</b> Cada bloque vale <span className="text-white font-mono">${riskPerHabitUsd.toFixed(2)}</span>
+                                <b>Modo {weeklyConfig?.mode || 'HARD'}:</b> Contrato activo protegiendo <b>{protectedHabitIds.length}</b> hábitos
+                                {riskPerBlockUsd > 0 && <span className="ml-1 opacity-80">(Bloques en juego: <span className="text-white font-mono">${riskPerBlockUsd.toFixed(2)}</span> /c/u)</span>}
                             </span>
                         </div>
-                        <div className="text-[10px] text-zinc-500">
-                            Total en juego: <span className="text-zinc-300">${(activeDeposit * ethPrice).toFixed(2)}</span>
+                        <div className="text-[10px] text-zinc-500 flex items-center gap-2">
+                            <span>Pool del Contrato:</span>
+                            <span className="text-blue-300 font-bold">{confirmedDepositEth.toFixed(4)} ETH <span className="text-zinc-500 hidden md:inline-block font-normal">(${(confirmedDepositEth * ethPrice).toFixed(2)})</span></span>
+                        </div>
+                    </div>
+                )}
+
+                {/* FINANCIAL RISK HEADER SUMMARY (SETTLED) */}
+                {isConfigActive && weeklyConfig?.status === 'SETTLED' && (
+                    <div className={cn(
+                        "w-full px-8 py-2 flex items-center justify-between border-b",
+                        parseFloat(weeklyConfig.amount_returned || '0') >= confirmedDepositEth
+                            ? "bg-emerald-500/5 border-emerald-500/10"
+                            : "bg-red-500/5 border-red-500/10"
+                    )}>
+                        <div className={cn(
+                            "flex items-center gap-2 text-xs",
+                            parseFloat(weeklyConfig.amount_returned || '0') >= confirmedDepositEth ? "text-emerald-400" : "text-red-400"
+                        )}>
+                            {parseFloat(weeklyConfig.amount_returned || '0') >= confirmedDepositEth ? <ShieldCheck size={12} /> : <AlertTriangle size={12} />}
+                            <span>
+                                <b>Contrato {weeklyConfig?.mode || 'HARD'} Finalizado:</b>
+                                {parseFloat(weeklyConfig.amount_returned || '0') >= confirmedDepositEth
+                                    ? " ¡Reto súperado! Fondos recuperados con éxito."
+                                    : " Reto no superado. Hubo quema parcial de fondos."}
+                            </span>
+                        </div>
+                        <div className="text-[10px] text-zinc-500 flex items-center gap-4">
+                            <span>Depositado: <span className="text-white font-bold">{confirmedDepositEth.toFixed(4)} ETH</span></span>
+                            <span>Devuelto: <span className={cn(
+                                "font-bold",
+                                parseFloat(weeklyConfig.amount_returned || '0') >= confirmedDepositEth ? "text-emerald-400" : "text-red-400"
+                            )}>
+                                {parseFloat(weeklyConfig.amount_returned || '0').toFixed(4)} ETH
+                            </span></span>
                         </div>
                     </div>
                 )}
@@ -943,6 +1012,12 @@ export function TimeBlockPlanner() {
                                         return hourBlocks.map((block, index) => {
                                             const habit = getHabitById(block.habitId);
                                             if (!habit) return null;
+
+                                            // Check if protected by contract
+                                            const isProtected = weeklyConfig?.active && (
+                                                isHardMode ||
+                                                weeklyConfig?.selected_habit_ids?.includes(habit.id)
+                                            );
 
                                             // HORIZONTAL TIME AXIS LOGIC
                                             // 1. Width = Duration (e.g., 30m = 50% of the row width)
@@ -1027,10 +1102,7 @@ export function TimeBlockPlanner() {
                                                             </svg>
                                                         </div>
 
-                                                        {/* --- Contract Identifier --- */}
-                                                        <div className="absolute top-1 right-1 z-0 text-[8px] font-mono text-zinc-500/50 select-none">
-                                                            #{block.id.slice(0, 4).toUpperCase()}:{habit.title.slice(0, 2).toUpperCase()}
-                                                        </div>
+                                                        {/* --- Contract Identifier removed to avoid confusion --- */}
 
                                                         <div className={cn("w-6 h-6 md:w-8 md:h-8 rounded-md flex items-center justify-center text-sm md:text-lg shadow-inner bg-black/20 shrink-0 relative z-10", habit.color.split(' ')[0])}>
                                                             {block.completed ? <CheckCircle size={14} className="text-emerald-400" /> : habit.emoji}
@@ -1038,24 +1110,57 @@ export function TimeBlockPlanner() {
                                                         <div className="min-w-0 flex-1 leading-none z-10">
                                                             <h4 className={cn("font-bold text-white truncate text-xs md:text-sm", block.completed && "line-through text-zinc-400")}>{habit.title}</h4>
                                                             {block.durationMin > 0 && (
-                                                                <span className="text-[9px] font-mono text-zinc-500 opacity-70">
-                                                                    {block.durationMin}m • <span className="text-[8px]">CONTRACT-{block.id.slice(-4)}</span>
-                                                                </span>
+                                                                <div className="flex flex-col items-start leading-none gap-0.5">
+                                                                    <span className="text-[9px] font-mono text-zinc-500 opacity-70">
+                                                                        {block.durationMin}m
+                                                                    </span>
+                                                                    {isProtected && weeklyConfig?.tx_hash ? (
+                                                                        <a
+                                                                            href={`https://sepolia.basescan.org/tx/${weeklyConfig.tx_hash}`}
+                                                                            target="_blank"
+                                                                            rel="noreferrer"
+                                                                            onClick={(e) => e.stopPropagation()}
+                                                                            className="flex items-center gap-0.5 text-[8px] text-blue-300 bg-blue-500/10 px-1 rounded hover:bg-blue-500/20 transition-colors border border-blue-500/20"
+                                                                        >
+                                                                            <ShieldCheck size={8} />
+                                                                            TX: {weeklyConfig.tx_hash.slice(0, 4)}...
+                                                                        </a>
+                                                                    ) : (
+                                                                        <span className="text-[8px] font-mono text-zinc-800 opacity-50">
+                                                                            #{block.id.slice(-4)}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             )}
                                                         </div>
 
                                                         {/* --- RISK BADGE --- */}
-                                                        {riskPerHabitUsd > 0 && (
+                                                        {/* --- RISK BADGE --- */}
+                                                        {isProtected && riskPerBlockUsd > 0 && weeklyConfig?.status !== 'SETTLED' && (
                                                             <div
-                                                                title={block.completed ? "Ganado" : `Si fallas, pierdes $${riskPerHabitUsd.toFixed(2)}`}
+                                                                title={block.completed ? "Ganado" : `Si fallas, pierdes el pool. Riesgo aprox por bloque: $${riskPerBlockUsd.toFixed(2)}`}
                                                                 className={cn(
                                                                     "absolute bottom-1 right-1 px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 shadow-sm backdrop-blur-sm transition-all hover:scale-110 cursor-help z-20",
                                                                     block.completed
                                                                         ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                                                                         : "bg-red-500/40 text-white border border-red-500/50 animate-pulse"
                                                                 )}>
-                                                                {block.completed ? <Shield size={10} /> : <Flame size={10} />}
-                                                                ${riskPerHabitUsd.toFixed(2)}
+                                                                {block.completed ? <ShieldCheck size={10} /> : <Flame size={10} />}
+                                                                ${riskPerBlockUsd.toFixed(2)}
+                                                            </div>
+                                                        )}
+                                                        {isProtected && riskPerBlockUsd > 0 && weeklyConfig?.status === 'SETTLED' && (
+                                                            <div
+                                                                title="Contrato finalizado"
+                                                                className={cn(
+                                                                    "absolute bottom-1 right-1 px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 shadow-sm backdrop-blur-sm transition-all hover:scale-110 cursor-help z-20",
+                                                                    parseFloat(weeklyConfig.amount_returned || '0') >= parseFloat(weeklyConfig.deposit_amount || '0')
+                                                                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50"
+                                                                        : "bg-red-500/20 text-red-400 border border-red-500/50"
+                                                                )}>
+                                                                {parseFloat(weeklyConfig.amount_returned || '0') >= parseFloat(weeklyConfig.deposit_amount || '0')
+                                                                    ? <><ShieldCheck size={10} /> WIN</>
+                                                                    : <><AlertTriangle size={10} /> LOSS</>}
                                                             </div>
                                                         )}
                                                         {/* ------------------ */}
